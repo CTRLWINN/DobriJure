@@ -83,7 +83,8 @@ class RobotController:
                                 "cm": parts[0], "pL": parts[1], "pR": parts[2],
                                 "arm": parts[3],
                                 "usF": parts[4], "usB": parts[5], "usL": parts[6], "usR": parts[7],
-                                "ind": parts[8]
+                                "ind": parts[8],
+                                "yaw": parts[9] if len(parts) > 9 else "0"
                             }
                             if self.on_telemetry_callback:
                                 self.on_telemetry_callback(data_dict)
@@ -613,7 +614,7 @@ class DashboardApp(ctk.CTk):
         if hasattr(self, 'latest_telemetry') and self.latest_telemetry:
             d = self.latest_telemetry
             # Update Labels
-            self.lbl_dist.configure(text=f"Distance: {d['cm']} cm")
+            self.lbl_dist.configure(text=f"Distance: {d['cm']} cm | Yaw: {d['yaw']}°")
             self.lbl_enc.configure(text=f"Enc: L={d['pL']} R={d['pR']}")
             self.lbl_arm.configure(text=f"Arm Preset: {d['arm']}")
             self.lbl_us_fb.configure(text=f"Front: {d['usF']} | Back: {d['usB']}")

@@ -106,6 +106,19 @@ void poslajiStatus() {
     Serial.print(usR); Serial.print(",");
     Serial.print(induct); Serial.print(",");
     Serial.println(dohvatiYaw()); // Heading (Smjer)
+
+    // Send to Bluetooth as well
+    Serial2.print("STATUS:");
+    Serial2.print(cm); Serial2.print(",");
+    Serial2.print(encL); Serial2.print(",");
+    Serial2.print(encR); Serial2.print(",");
+    Serial2.print(armIdx); Serial2.print(",");
+    Serial2.print(usF); Serial2.print(",");
+    Serial2.print(usB); Serial2.print(",");
+    Serial2.print(usL); Serial2.print(",");
+    Serial2.print(usR); Serial2.print(",");
+    Serial2.print(induct); Serial2.print(",");
+    Serial2.println(dohvatiYaw()); 
 }
 void izvrsiFazuSkupljanja();
 void izvrsiFazuSortiranja();
@@ -165,7 +178,7 @@ void loop() {
 
     // --- 2. SIGURNOST (IMU PREPREKA) ---
     if (jeUPokretu()) {
-        provjeriUdarac();
+        //provjeriUdarac();
     }
 
     // --- STATUS REPORT (DONE) ---
