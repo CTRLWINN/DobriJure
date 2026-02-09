@@ -486,6 +486,24 @@ class DashboardApp(ctk.CTk):
         for lbl, cmd in funcs:
             ctk.CTkButton(self.frame_sidebar, text=lbl, command=lambda c=cmd: self.load_inspector(c)).pack(pady=5, padx=10, fill="x")
 
+        # --- RESET BUTTONS ---
+        ctk.CTkLabel(self.frame_sidebar, text="--- Reseti ---", font=("Arial", 12)).pack(pady=(20, 5))
+        ctk.CTkButton(self.frame_sidebar, text="RESET ENCODER", fg_color="orange", command=self.reset_encoder_cmd).pack(pady=2, padx=10, fill="x")
+        ctk.CTkButton(self.frame_sidebar, text="RESET IMU", fg_color="orange", command=self.reset_imu_cmd).pack(pady=2, padx=10, fill="x")
+
+        # --- TELEMETRY LABELS (To fix AttributeError) ---
+        ctk.CTkLabel(self.frame_sidebar, text="--- Telemetrija ---", font=("Arial", 12)).pack(pady=(20, 5))
+        self.lbl_dist = ctk.CTkLabel(self.frame_sidebar, text="Distance: 0 cm")
+        self.lbl_dist.pack()
+        self.lbl_enc = ctk.CTkLabel(self.frame_sidebar, text="Enc: L=0 R=0")
+        self.lbl_enc.pack()
+        self.lbl_arm = ctk.CTkLabel(self.frame_sidebar, text="Arm: -")
+        self.lbl_arm.pack()
+        self.lbl_us_fb = ctk.CTkLabel(self.frame_sidebar, text="F: - | B: -")
+        self.lbl_us_fb.pack()
+        self.lbl_us_lr = ctk.CTkLabel(self.frame_sidebar, text="L: - | R: -")
+        self.lbl_us_lr.pack()
+
         # 2. Inspector
         self.frame_inspector = ctk.CTkFrame(self.tab_manual, corner_radius=0)
         self.frame_inspector.grid(row=0, column=1, sticky="nsew", padx=2, pady=2)
@@ -861,6 +879,12 @@ class DashboardApp(ctk.CTk):
             messagebox.showinfo("Saved", f"Misija spremljena u {filename}")
         except Exception as e:
             messagebox.showerror("Error", f"Could not save: {e}")
+
+    def reset_encoder_cmd(self):
+        self.robot.send_command('{"cmd": "reset_enc"}')
+        
+    def reset_imu_cmd(self):
+        self.robot.send_command('{"cmd": "cal_imu"}')
 
     def load_mission(self):
         try:

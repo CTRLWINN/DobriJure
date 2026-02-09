@@ -266,8 +266,13 @@ void checkSerial(Stream* stream) {
             
             if (strcmp(cmd, "straight") == 0) {
                 float val = doc["val"];
-                straightDrive(val);
-                stream->println("{\"status\": \"OK\"}");
+                // Koristimo novu blokirajuću funkciju
+                voziRavno(val);
+                stream->println("{\"status\": \"DONE\"}"); // Odmah saljemo DONE jer je blokirajuce
+            }
+            else if (strcmp(cmd, "reset_enc") == 0) {
+                resetirajEnkodereCmd();
+                stream->println("{\"status\": \"ENC_RESET\"}");
             }
             else if (strcmp(cmd, "move_dual") == 0) {
                 int l = doc["l"];

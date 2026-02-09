@@ -287,3 +287,81 @@ void azurirajKretanje() {
     // Ali s obzirom na prompt, Lane Assist je primarni nacin vodjenja (u Fusionu).
     // Ostavljamo prazno da ne smeta IMU voznji.
 }
+ 
+ / /   - - -   J E D N O S T A V N O   K R E T A N J E   ( B l o k i r a j u Ä ! e )   - - -  
+ v o i d   v o z i R a v n o ( f l o a t   c m )   {  
+         i f   ( c m   = =   0 )   r e t u r n ;  
+          
+         / /   1 .   P r i p r e m a  
+         s t a n i ( ) ;   / /   O s i g u r a j   d a   s t o j i  
+         r e s e t i r a j E n k o d e r e ( ) ;  
+         a z u r i r a j I M U ( ) ;  
+          
+         f l o a t   s t a r t Y a w   =   d o h v a t i Y a w ( ) ;  
+         l o n g   t a r g e t P u l s e s   =   a b s ( c m   *   I M P U L S A _ P O _ C M ) ;  
+         i n t   s m j e r   =   ( c m   >   0 )   ?   1   :   - 1 ;  
+         i n t   b a s e S p d   =   b a z n a B r z i n a   *   s m j e r ;  
+          
+         / /   2 .   P e t l j a   v o Å ¾ n j e  
+         w h i l e   ( t r u e )   {  
+                 / /   A Å ¾ u r i r a j   s e n z o r e  
+                 a z u r i r a j I M U ( ) ;  
+                 l o n g   l   =   a b s ( d o h v a t i L i j e v i E n k o d e r ( ) ) ;  
+                 l o n g   r   =   a b s ( d o h v a t i D e s n i E n k o d e r ( ) ) ;  
+                  
+                 / /   P r o v j e r a   k r a j a  
+                 i f   ( l   > =   t a r g e t P u l s e s   | |   r   > =   t a r g e t P u l s e s )   {  
+                         b r e a k ;    
+                 }  
+                  
+                 / /   K o r e k c i j a   s m j e r a  
+                 f l o a t   c u r r e n t Y a w   =   d o h v a t i Y a w ( ) ;  
+                 f l o a t   e r r o r   =   n o r m a l i z i r a j K u t ( s t a r t Y a w   -   c u r r e n t Y a w ) ;    
+                  
+                 / /   T o l e r a n c i j a   + - 2   s t u p n j a   ( D e a d z o n e )  
+                 i f   ( a b s ( e r r o r )   <   2 . 0 )   e r r o r   =   0 ;  
+                  
+                 / /   P - R e g u l a t o r  
+                 f l o a t   K p _ s i m p l e   =   5 . 0 ;    
+                 i n t   c o r r e c t i o n   =   e r r o r   *   K p _ s i m p l e ;  
+                  
+                 / /   L i m i t   c o r r e c t i o n  
+                 c o r r e c t i o n   =   c o n s t r a i n ( c o r r e c t i o n ,   - 5 0 ,   5 0 ) ;  
+                  
+                 i n t   s p d L   =   b a s e S p d ;  
+                 i n t   s p d R   =   b a s e S p d ;  
+  
+                 / /   A k o   g r e s k a   >   0   ( g l e d a   d e s n o ) ,   e r r o r   *   K p   j e   p o z i t i v a n .  
+                 / /   Z e l i m o   s k r e n u t i   l i j e v o .   D e s n i   m o r a   b i t i   b r z i   ( i l i   j e d n a k o   b r z ) ,   l i j e v i   s p o r i j i .  
+                 / /   A k o   i d e m o   n a p r i j e d   ( b a s e S p d   >   0 ) :  
+                 / /   L   =   B a s e   +   c o r r ,   R   =   B a s e   -   c o r r   - >   L   b r z i   - >   S k r e c e   D e s n o .   P O G R E S N O .  
+                 / /   L   =   B a s e   -   c o r r ,   R   =   B a s e   +   c o r r   - >   R   b r z i   - >   S k r e c e   L i j e v o .   T O C N O .  
+                  
+                 i f   ( s m j e r   >   0 )   {  
+                           s p d L   =   b a s e S p d   -   c o r r e c t i o n ;  
+                           s p d R   =   b a s e S p d   +   c o r r e c t i o n ;  
+                 }   e l s e   {  
+                           / /   A k o   i d e m o   n a z a d   ( b a s e S p d   <   0 ) :  
+                           / /   B a s e   =   - 1 0 0 .   E r r o r   =   1 0 .   C o r r   =   5 0 .  
+                           / /   L   =   - 1 5 0 ,   R   =   - 5 0 .   L i j e v i   b r z e   v r t i   u n a z a d   - >   G u z i c a   i d e   d e s n o   - >   N o s   l i j e v o .   T O C N O .  
+                           s p d L   =   b a s e S p d   -   c o r r e c t i o n ;  
+                           s p d R   =   b a s e S p d   +   c o r r e c t i o n ;  
+                 }  
+  
+                 s p d L   =   c o n s t r a i n ( s p d L ,   - 2 5 5 ,   2 5 5 ) ;  
+                 s p d R   =   c o n s t r a i n ( s p d R ,   - 2 5 5 ,   2 5 5 ) ;  
+  
+                 l i j e v i M o t o r ( s p d L ) ;  
+                 d e s n i M o t o r ( s p d R ) ;  
+                  
+                 d e l a y ( 1 0 ) ;  
+         }  
+          
+         / /   3 .   K r a j  
+         s t a n i ( ) ;  
+ }  
+  
+ v o i d   r e s e t i r a j E n k o d e r e C m d ( )   {  
+         r e s e t i r a j E n k o d e r e ( ) ;  
+ }  
+ 

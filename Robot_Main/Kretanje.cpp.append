@@ -1,0 +1,77 @@
+
+// --- JEDNOSTAVNO KRETANJE (Blokirajuće) ---
+void voziRavno(float cm) {
+    if (cm == 0) return;
+    
+    // 1. Priprema
+    stani(); // Osiguraj da stoji
+    resetirajEnkodere();
+    azurirajIMU();
+    
+    float startYaw = dohvatiYaw();
+    long targetPulses = abs(cm * IMPULSA_PO_CM);
+    int smjer = (cm > 0) ? 1 : -1;
+    int baseSpd = baznaBrzina * smjer;
+    
+    // 2. Petlja vožnje
+    while (true) {
+        // Ažuriraj senzore
+        azurirajIMU();
+        long l = abs(dohvatiLijeviEnkoder());
+        long r = abs(dohvatiDesniEnkoder());
+        
+        // Provjera kraja
+        if (l >= targetPulses || r >= targetPulses) {
+            break; 
+        }
+        
+        // Korekcija smjera
+        float currentYaw = dohvatiYaw();
+        float error = normalizirajKut(startYaw - currentYaw); 
+        
+        // Tolerancija +-2 stupnja (Deadzone)
+        if (abs(error) < 2.0) error = 0;
+        
+        // P-Regulator
+        float Kp_simple = 5.0; 
+        int correction = error * Kp_simple;
+        
+        // Limit correction
+        correction = constrain(correction, -50, 50);
+        
+        int spdL = baseSpd;
+        int spdR = baseSpd;
+
+        // Ako greska > 0 (gleda desno), error * Kp je pozitivan.
+        // Zelimo skrenuti lijevo. Desni mora biti brzi (ili jednako brz), lijevi sporiji.
+        // Ako idemo naprijed (baseSpd > 0):
+        // L = Base + corr, R = Base - corr -> L brzi -> Skrece Desno. POGRESNO.
+        // L = Base - corr, R = Base + corr -> R brzi -> Skrece Lijevo. TOCNO.
+        
+        if (smjer > 0) {
+             spdL = baseSpd - correction;
+             spdR = baseSpd + correction;
+        } else {
+             // Ako idemo nazad (baseSpd < 0):
+             // Base = -100. Error = 10. Corr = 50.
+             // L = -150, R = -50. Lijevi brze vrti unazad -> Guzica ide desno -> Nos lijevo. TOCNO.
+             spdL = baseSpd - correction;
+             spdR = baseSpd + correction;
+        }
+
+        spdL = constrain(spdL, -255, 255);
+        spdR = constrain(spdR, -255, 255);
+
+        lijeviMotor(spdL);
+        desniMotor(spdR);
+        
+        delay(10);
+    }
+    
+    // 3. Kraj
+    stani();
+}
+
+void resetirajEnkodereCmd() {
+    resetirajEnkodere();
+}
