@@ -551,7 +551,6 @@ class DashboardApp(ctk.CTk):
         elif cmd_type == "move_dual":
             self.add_param_input("Lijevi PWM:", "l")
             self.add_param_input("Desni PWM:", "r")
-            self.add_param_input("Udaljenost (cm):", "dist")
         elif cmd_type == "turn":
             self.add_param_input("Kut (stupnjevi):", "val")
         elif cmd_type == "pivot":
@@ -758,7 +757,7 @@ class DashboardApp(ctk.CTk):
 
     def stop_mission(self):
         self.mission_running = False
-        self.robot.send_command("MAN:STOP") # or STANI
+        self.robot.send_command(json.dumps({"cmd": "stop"}))
         self.lbl_auto_status.configure(text="STATUS: STOPPED", text_color="red")
 
     def run_mission_thread(self):
@@ -770,44 +769,71 @@ class DashboardApp(ctk.CTk):
             line = line.strip()
             if not line or line.startswith("---") or line.startswith("#"): continue
             
-            print(f"Executing: {line}")
-            # Use 'after' if we want detailed UI update, but thread safe way often required
-            # For status label, we risk it or queue it. CTK usually handles text config okay from threads.
             self.lbl_auto_status.configure(text=f"Exec: {line}")
             
-            parts = line.split(":") 
-            cmd_type = parts[0]
+            # 1. Parse Command
+            payload = None
+            try:
+                # Try JSON first (New Interface)
+                payload = json.loads(line)
+            except:
+                # Fallback to Old Text Format (CMD:VAL)
+                parts = line.split(":")
+                if len(parts) >= 2:
+                    if parts[0] == "MOVE": payload = {"cmd": "straight", "val": float(parts[1])}
+                    elif parts[0] == "ARM": payload = {"cmd": "arm", "val": parts[1]}
+                    elif parts[0] == "WAIT": payload = {"cmd": "wait", "val": int(parts[1])}
             
-            if cmd_type == "MOVE":
-                target = int(float(parts[1]))
-                cmd = f"MOVE:{target}" 
-                self.robot.send_command(cmd)
-                
-                # Wait logic
-                time.sleep(0.5) 
+            if not payload: 
+                print(f"Skipping invalid line: {line}")
+                continue
+
+            cmd_type = payload.get("cmd")
+            
+            # 2. Execute & Wait
+            if cmd_type == "wait":
+                ms = int(payload.get("val", 0))
+                time.sleep(ms / 1000.0)
+                continue
+
+            # Send Command to Robot
+            self.robot.send_command(json.dumps(payload))
+            
+            # Blocking Logic based on Command Type
+            if cmd_type == "straight":
+                target = float(payload.get("val", 0))
+                # Wait for distance (Telemetry)
+                time.sleep(0.5) # Allow start
                 start_time = time.time()
                 while self.mission_running:
-                    if time.time() - start_time > 10: break 
+                    if time.time() - start_time > 10: break # Timeout 10s
                     try:
                         curr = float(self.latest_telemetry.get('cm', 0))
+                        # Check if within tolerance (e.g. 2cm)
+                        # Note: 'cm' from robot is cumulative or reset? 
+                        # Robot 'voziRavno' RESETS encoders/distance at start.
+                        # So telemetry 'cm' should grow from 0 to target.
                         if abs(curr) >= abs(target) - 2:
                             break
                     except: pass
                     time.sleep(0.1)
-                time.sleep(0.5) 
+                time.sleep(0.5)
 
-            elif cmd_type == "ARM":
-                preset_name = parts[1]
-                try:
-                    idx = self.preset_names.index(preset_name)
-                    self.robot.send_command(f"LOAD_PRESET:{idx}")
-                    time.sleep(2.0)
-                except:
-                    print(f"Unknown Preset: {preset_name}")
+            elif cmd_type == "arm":
+                # Wait fixed time for arm
+                time.sleep(2.0)
             
-            elif cmd_type == "WAIT":
-                ms = int(parts[1])
-                time.sleep(ms / 1000.0)
+            elif cmd_type in ["turn", "pivot"]:
+                 # Wait fixed time (approximate) or check Yaw
+                 # For now, fixed delay proportional to angle is safest without advanced yaw logic
+                 val = float(payload.get("val", 0))
+                 wait_time = abs(val) / 45.0 # Approx 1 sec per 45 deg?
+                 if wait_time < 1.0: wait_time = 1.0
+                 time.sleep(wait_time)
+
+            elif cmd_type == "move_dual":
+                # Manual move, non-blocking default
+                pass
 
         self.mission_running = False
         self.lbl_auto_status.configure(text="STATUS: DONE", text_color="blue")
@@ -830,8 +856,15 @@ class DashboardApp(ctk.CTk):
         
         # 2. Motor
         puls = self.entry_pulses.get()
-        spd = self.entry_speed.get()
-        self.robot.send_command(f"SET_MOTOR:{puls},{spd}")
+        # spd = self.entry_speed.get() # Speed not currently used in set_motor/postaviKonfigKretanja
+        # self.robot.send_command(f"SET_MOTOR:{puls},{spd}") # OLD
+        
+        try:
+            val = float(puls)
+            payload = {"cmd": "set_motor", "val": val}
+            self.robot.send_command(json.dumps(payload))
+        except:
+            messagebox.showerror("Error", "Invalid Pulse Value")
 
     def save_preset(self):
         name = self.combo_preset.get()

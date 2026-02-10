@@ -10,6 +10,17 @@
 // Instanca PWM drivera
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(ADRESA_PCA9685);
 
+// Instanca konfiguracije
+RobotConfig config;
+
+// Imena preseta (usklađeno s Dashboardom)
+const char* presetNames[] = {
+    "Parkiraj", "Voznja", "Uzmi_Boca", "Uzmi_Limenka", "Uzmi_Spuzva",
+    "Spremi_1", "Spremi_2", "Spremi_3",
+    "Iz_Sprem_1", "Iz_Sprem_2", "Iz_Sprem_3",
+    "Dostava_1", "Dostava_2", "Dostava_3", "Extra"
+};
+
 void inicijalizirajHardware() {
     // --- Inicijalizacija Serijskih Portova ---
     Serial.begin(115200);  // Debug

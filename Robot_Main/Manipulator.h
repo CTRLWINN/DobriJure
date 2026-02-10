@@ -70,10 +70,10 @@ private:
      */
     bool jesuLiMotoriStigli();
 
-    void primjeniPreset(int idx);
-
 public:
     Manipulator();
+
+    void primjeniPreset(int idx);
 
     /**
      * Postavlja ciljani kut za određeni kanal.

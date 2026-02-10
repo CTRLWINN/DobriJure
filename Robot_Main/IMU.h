@@ -37,6 +37,18 @@ void azurirajIMU();
 float dohvatiYaw();
 
 /**
+ * Vraća integrirani kut iz žiroskopa (Z-os).
+ * 0 je tamo gdje je robot bio kod zadnjeg resetirajGyro().
+ * Pozitivno = Lijevo (CCW), Negativno = Desno (CW).
+ */
+float dohvatiKutGyro();
+
+/**
+ * Resetira integrirani kut žiroskopa na 0.
+ */
+void resetirajGyro();
+
+/**
  * Vraća ubrzanje po Z osi.
  * Korisno za detekciju udaraca/nagiba. (G-force)
  */

@@ -25,6 +25,6 @@ void desniMotor(int brzina);
 /**
  * Zaustavlja oba motora trenutno.
  */
-void stani();
+void motori_stani();
 
 #endif // MOTORI_H

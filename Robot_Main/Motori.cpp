@@ -21,7 +21,7 @@ void postaviMotor(int pinPWM, int pinIN1, int pinIN2, int brzina) {
         // Nazad
         digitalWrite(pinIN1, LOW);
         digitalWrite(pinIN2, HIGH);
-        analogWrite(pinPWM, -brzina); // PWM mora biti pozitivan
+        analogWrite(pinPWM, abs(-brzina)); // PWM mora biti pozitivan
     } else {
         // Stop (kočenje)
         digitalWrite(pinIN1, LOW);
@@ -38,7 +38,7 @@ void desniMotor(int brzina) {
     postaviMotor(PIN_MOTOR_R_PWM, PIN_MOTOR_R_IN1, PIN_MOTOR_R_IN2, brzina);
 }
 
-void stani() {
+void motori_stani() {
     lijeviMotor(0);
     desniMotor(0);
 }

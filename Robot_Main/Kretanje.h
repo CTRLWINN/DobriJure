@@ -3,30 +3,34 @@
 
 #include <Arduino.h>
 
-// Stanja kretanja
-enum StanjeKretanja {
-    KRETANJE_IDLE,
-    KRETANJE_RAVNO,
-    KRETANJE_ROTACIJA,
-    KRETANJE_LINIJA,
-    KRETANJE_PIVOT,
-    KRETANJE_DUAL
-};
-
-void zapocniVoznju(float cm);
-void zapocniRotaciju(float stupnjevi);
-void straightDrive(float cm); // Wrapper za JSON
-void pivotTurn(float kut);
-void differentialDrive(int l, int r, float dist);
-void pokreniPracenjeLinije();
-void zaustaviKretanje();
-float dohvatiPredjeniPutCm();
-bool jeUPokretu();
-void azurirajKretanje();
-void postaviKonfigKretanja(float impulsaPoCm);
-
-// Nove funkcije
+/**
+ * Pravocrtno kretanje (Encoder Only).
+ * @param cm Udaljenost u cm.
+ */
 void voziRavno(float cm);
-void resetirajEnkodereCmd();
+
+/**
+ * Pokreće motore zadanom brzinom.
+ * Ne blokira. Ne staje sama.
+ * @param lijeviMotor Brzina lijevog (-255 do 255)
+ * @param desniMotor Brzina desnog (-255 do 255)
+ */
+void vozi(int lijeviMotor, int desniMotor);
+
+/**
+ * Okret na mjestu.
+ * @param kut Kut u stupnjevima.
+ */
+void okreni(float kut);
+
+/**
+ * Pivot turn.
+ * @param kut Kut u stupnjevima.
+ */
+void skreni(float kut);
+
+void postaviKonfigKretanja(float impulsaPoCm);
+void zaustaviKretanje();
+void stani();
 
 #endif
