@@ -28,6 +28,9 @@ void setup() {
     // Osiguraj da robot stoji
     stani();
     
+    // Smanji timeout za Serial2 da readString ne blokira dugo u petljama
+    Serial2.setTimeout(5);
+    
     Serial.println("Robot Ready. Waiting for commands...");
 }
 
@@ -49,7 +52,8 @@ void loop() {
 
                 if (strcmp(cmd, "straight") == 0) {
                     float val = doc["val"];
-                    voziRavno(val);
+                    int spd = doc["spd"] | 0; // Default 0 -> BAZNA
+                    voziRavno(val, spd);
                     Serial2.println("{\"status\": \"DONE\"}");
                 }
                 else if (strcmp(cmd, "move_dual") == 0) {
@@ -65,12 +69,14 @@ void loop() {
                 }
                 else if (strcmp(cmd, "turn") == 0) {
                      float val = doc["val"];
-                     okreni(val);
+                     int spd = doc["spd"] | 0;
+                     okreni(val, spd);
                      Serial2.println("{\"status\": \"DONE\"}");
                 }
                 else if (strcmp(cmd, "pivot") == 0) {
                      float val = doc["val"];
-                     skreni(val);
+                     int spd = doc["spd"] | 0;
+                     skreni(val, spd);
                      Serial2.println("{\"status\": \"DONE\"}");
                 }
                 else if (strcmp(cmd, "arm") == 0) {
@@ -101,7 +107,24 @@ void loop() {
                 }
                 else if (strcmp(cmd, "set_motor") == 0) {
                     float val = doc["val"];
-                    postaviKonfigKretanja(val);
+                    postaviKonfigKretanja(val); // Old function, kept for compatibility if needed
+                    Serial2.println("{\"status\": \"OK\"}");
+                }
+                else if (strcmp(cmd, "set_move_cfg") == 0) {
+                    float imp = doc["imp"] | 0.0;
+                    int spd = doc["spd"] | 0;
+                    float kp = doc["kp"] | -1.0;
+                    int min_spd = doc["min"] | -1;
+                    postaviParametre(imp, spd, kp, min_spd);
+                    Serial2.println("{\"status\": \"OK\"}");
+                }
+                else if (strcmp(cmd, "reset_enc") == 0) {
+                    resetirajEnkodere();
+                    Serial2.println("{\"status\": \"OK\"}");
+                }
+                else if (strcmp(cmd, "reset_imu") == 0) {
+                    resetirajGyro();
+                    // Optional: Recalibrate mag if needed or just reset angle integration
                     Serial2.println("{\"status\": \"OK\"}");
                 }
                 else {
@@ -121,10 +144,10 @@ void loop() {
         
         long encL = dohvatiLijeviEnkoder();
         long encR = dohvatiDesniEnkoder();
-        // Distance je prosjek (u cm), ali HardwareMap.cpp ima IMPULSE_PO_CM pa mozemo izracunati ili samo poslati raw.
-        // Dashboard ocekuje 'cm', poslat cemo (L+R)/2 / 42.85 (tvrdo kodirano ili extern).
-        // Bolje raw pa neka dash racuna, ali protokol trazi cm.
-        float cm = (encL + encR) / 2.0 / 42.85; // Approx
+        
+        // Koristimo globalnu varijablu iz Kretanje.cpp za tocnu konverziju
+        extern float IMPULSA_PO_CM; 
+        float cm = (encL + encR) / 2.0 / IMPULSA_PO_CM; 
         
         int armIdx = ruka.dohvatiCiljaniPreset();
         
@@ -135,9 +158,10 @@ void loop() {
         
         bool ind = ocitajInduktivni();
         
-        float yaw = dohvatiYaw(); // Ili dohvatiKutGyro() ovisno sto zelimo
+        float yaw = dohvatiYaw(); 
+        float gyro = dohvatiKutGyro();
         
-        // Format: STATUS:cm,pL,pR,armIdx,usF,usB,usL,usR,ind,yaw
+        // Format: STATUS:cm,pL,pR,armIdx,usF,usB,usL,usR,ind,yaw,gyro
         Serial2.print("STATUS:");
         Serial2.print(cm, 1); Serial2.print(",");
         Serial2.print(encL); Serial2.print(",");
@@ -148,6 +172,7 @@ void loop() {
         Serial2.print(usL); Serial2.print(",");
         Serial2.print(usR); Serial2.print(",");
         Serial2.print(ind ? "1" : "0"); Serial2.print(",");
-        Serial2.println(yaw, 1);
+        Serial2.print(yaw, 1); Serial2.print(",");
+        Serial2.println(gyro, 1);
     }
 }

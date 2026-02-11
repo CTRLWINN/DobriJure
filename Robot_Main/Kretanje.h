@@ -6,8 +6,9 @@
 /**
  * Pravocrtno kretanje (Encoder Only).
  * @param cm Udaljenost u cm.
+ * @param speed Brzina (0 = koristi BAZNA_BRZINA).
  */
-void voziRavno(float cm);
+void voziRavno(float cm, int speed = 0);
 
 /**
  * Pokreće motore zadanom brzinom.
@@ -20,14 +21,16 @@ void vozi(int lijeviMotor, int desniMotor);
 /**
  * Okret na mjestu.
  * @param kut Kut u stupnjevima.
+ * @param speed Brzina (0 = koristi BAZNA_BRZINA).
  */
-void okreni(float kut);
+void okreni(float kut, int speed = 0);
 
 /**
  * Pivot turn.
  * @param kut Kut u stupnjevima.
+ * @param speed Brzina (0 = koristi BAZNA_BRZINA).
  */
-void skreni(float kut);
+void skreni(float kut, int speed = 0);
 
 /**
  * Vozi zadanim brzinama motora do predene udaljenosti.
@@ -38,7 +41,12 @@ void skreni(float kut);
  */
 void vozi(int lijeviMotor, int desniMotor, float cm);
 
+void postaviParametre(float imp, int brzina, float kp, int minBrzina);
+
 void postaviKonfigKretanja(float impulsaPoCm);
+// Provjerava Serial2 za "stop" naredbu. Vraca true ako je stopiran.
+bool provjeriHitniStop();
+
 void zaustaviKretanje();
 void stani();
 

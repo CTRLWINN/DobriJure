@@ -68,6 +68,7 @@ class RobotController:
     def notification_handler(self, sender, data):
         try:
             chunk = data.decode('utf-8', errors='ignore')
+            # print(f"DEBUG RX CHUNK: {repr(chunk)}") # Configurable debug
             self.rx_buffer += chunk
             
             if "\n" in self.rx_buffer:
@@ -75,20 +76,30 @@ class RobotController:
                 
                 for line in lines[:-1]:
                     line = line.strip()
-                    if line.startswith("STATUS:"):
-                        # STATUS:cm,pL,pR,armIdx,usF,usB,usL,usR,ind
-                        parts = line.split(":")[1].split(",")
-                        if len(parts) >= 9:
-                            data_dict = {
-                                "cm": parts[0], "pL": parts[1], "pR": parts[2],
-                                "arm": parts[3],
-                                "usF": parts[4], "usB": parts[5], "usL": parts[6], "usR": parts[7],
-                                "ind": parts[8],
-                                "yaw": parts[9] if len(parts) > 9 else "0"
-                            }
-                            if self.on_telemetry_callback:
-                                self.on_telemetry_callback(data_dict)
-                    elif line and not line.startswith("DEBUG"): 
+                    if not line: continue
+                    
+                    # Relaxed matching: verify contains STATUS:
+                    if "STATUS:" in line:
+                        # Extract from STATUS: onwards
+                        try:
+                            clean_line = line[line.find("STATUS:"):]
+                            parts = clean_line.split(":")[1].split(",")
+                            if len(parts) >= 9:
+                                data_dict = {
+                                    "cm": parts[0], "pL": parts[1], "pR": parts[2],
+                                    "arm": parts[3],
+                                    "usF": parts[4], "usB": parts[5], "usL": parts[6], "usR": parts[7],
+                                    "ind": parts[8],
+                                    "yaw": parts[9] if len(parts) > 9 else "0",
+                                    "gyro": parts[10] if len(parts) > 10 else "0"
+                                }
+                                if self.on_telemetry_callback:
+                                    self.on_telemetry_callback(data_dict)
+                                # print("Telemetry OK") 
+                        except Exception as e:
+                            print(f"Parse Error '{line}': {e}")
+
+                    elif not line.startswith("DEBUG"): 
                         print(f"RX: {line}")
                             
                 self.rx_buffer = lines[-1]
@@ -381,6 +392,16 @@ class DashboardApp(ctk.CTk):
             max_angle = 360 if i == 0 else 180
             self.create_servo_control(col3, i, servo_names[i], max_angle)
 
+        # --- POSTAVKE KRETANJA (Ispod manipulatora) ---
+        ctk.CTkLabel(col3, text="Postavke Kretanja", font=("Arial", 16, "bold")).pack(pady=(20,5))
+        f_move = ctk.CTkFrame(col3)
+        f_move.pack(fill="x", padx=5, pady=5)
+        
+        self.entry_imp = self.create_config_row(f_move, "Imp/cm:", "50", self.send_imp)
+        self.entry_spd = self.create_config_row(f_move, "Brzina:", "200", self.send_spd)
+        self.entry_min = self.create_config_row(f_move, "Min Brz:", "80", self.send_min)
+        self.entry_kp  = self.create_config_row(f_move, "Kp:", "2.0", self.send_kp)
+
     def create_servo_control(self, parent, idx, name, max_angle=180):
         f = ctk.CTkFrame(parent)
         f.pack(fill="x", padx=5, pady=2)
@@ -414,6 +435,72 @@ class DashboardApp(ctk.CTk):
         
         self.sliders.append(slider)
         self.servo_entries.append(entry)
+
+    def create_config_row(self, parent, label, default, cmd):
+        f = ctk.CTkFrame(parent, fg_color="transparent")
+        f.pack(fill="x", pady=2)
+        ctk.CTkLabel(f, text=label, width=60, anchor="w").pack(side="left")
+        e = ctk.CTkEntry(f, width=60)
+        e.pack(side="left", padx=5)
+        e.insert(0, default)
+        ctk.CTkButton(f, text="SET", width=40, command=cmd).pack(side="right", padx=5)
+        return e
+
+    def create_labeled_entry(self, parent, label, default):
+        f = ctk.CTkFrame(parent, fg_color="transparent")
+        f.pack(fill="x", pady=2)
+        ctk.CTkLabel(f, text=label, width=60, anchor="w").pack(side="left")
+        e = ctk.CTkEntry(f)
+        e.pack(side="right", expand=True, fill="x")
+        e.insert(0, default)
+        return e
+
+    def send_imp(self):
+        try:
+            val = float(self.entry_imp.get())
+            self.robot.send_command(json.dumps({"cmd": "set_move_cfg", "imp": val}))
+            print(f"Sent Imp: {val}")
+        except: pass
+
+    def send_spd(self):
+        try:
+            val = int(self.entry_spd.get())
+            self.robot.send_command(json.dumps({"cmd": "set_move_cfg", "spd": val}))
+            print(f"Sent Spd: {val}")
+        except: pass
+
+    def send_min(self):
+        try:
+            val = int(self.entry_min.get())
+            self.robot.send_command(json.dumps({"cmd": "set_move_cfg", "min": val}))
+            print(f"Sent Min: {val}")
+        except: pass
+
+    def send_kp(self):
+        try:
+            val = float(self.entry_kp.get())
+            self.robot.send_command(json.dumps({"cmd": "set_move_cfg", "kp": val}))
+            print(f"Sent Kp: {val}")
+        except: pass
+
+    def send_move_cfg(self):
+        try:
+            imp = float(self.entry_imp.get())
+            spd = int(self.entry_spd.get())
+            min_spd = int(self.entry_min.get())
+            kp = float(self.entry_kp.get())
+            
+            payload = {
+                "cmd": "set_move_cfg",
+                "imp": imp,
+                "spd": spd,
+                "min": min_spd,
+                "kp": kp
+            }
+            self.robot.send_command(json.dumps(payload))
+            messagebox.showinfo("Info", "Parametri kretanja poslani!")
+        except Exception as e:
+            messagebox.showerror("Error", f"Neispravni podaci: {e}")
 
     def send_servo(self, ch, val):
         self.robot.send_command(f"SERVO:{ch},{val:.1f}")
@@ -494,17 +581,41 @@ class DashboardApp(ctk.CTk):
         ctk.CTkButton(self.frame_sidebar, text="RESET ENCODER", fg_color="orange", command=self.reset_encoder_cmd).pack(pady=2, padx=10, fill="x")
         ctk.CTkButton(self.frame_sidebar, text="RESET IMU", fg_color="orange", command=self.reset_imu_cmd).pack(pady=2, padx=10, fill="x")
 
-        # --- TELEMETRY LABELS (To fix AttributeError) ---
-        ctk.CTkLabel(self.frame_sidebar, text="--- Telemetrija ---", font=("Arial", 12)).pack(pady=(20, 5))
-        self.lbl_dist = ctk.CTkLabel(self.frame_sidebar, text="Distance: 0 cm")
-        self.lbl_dist.pack()
-        self.lbl_enc = ctk.CTkLabel(self.frame_sidebar, text="Enc: L=0 R=0")
-        self.lbl_enc.pack()
-        self.lbl_arm = ctk.CTkLabel(self.frame_sidebar, text="Arm: -")
-        self.lbl_arm.pack()
-        self.lbl_us_fb = ctk.CTkLabel(self.frame_sidebar, text="F: - | B: -")
+        # --- TELEMETRY BEAUTIFICATION ---
+        ctk.CTkLabel(self.frame_sidebar, text="--- Telemetrija ---", font=("Arial", 14, "bold")).pack(pady=(20, 5))
+        
+        # Grid System for Telemetry
+        self.frame_telemetry = ctk.CTkFrame(self.frame_sidebar, fg_color="transparent")
+        self.frame_telemetry.pack(fill="x", padx=2)
+        
+        # Row 1: Distance & Arm
+        r1 = ctk.CTkFrame(self.frame_telemetry)
+        r1.pack(fill="x", pady=2)
+        self.lbl_dist = ctk.CTkLabel(r1, text="Dist: 0 cm", font=("Consolas", 12, "bold"))
+        self.lbl_dist.pack(side="left", padx=5)
+        self.lbl_arm = ctk.CTkLabel(r1, text="Arm: -", font=("Consolas", 12))
+        self.lbl_arm.pack(side="right", padx=5)
+
+        # Row 2: IMU (Gyro & Mag)
+        r2 = ctk.CTkFrame(self.frame_telemetry)
+        r2.pack(fill="x", pady=2)
+        self.lbl_gyro = ctk.CTkLabel(r2, text="Gyro: 0°", text_color="cyan", font=("Consolas", 12))
+        self.lbl_gyro.pack(side="left", padx=5)
+        self.lbl_mag  = ctk.CTkLabel(r2, text="Mag: 0°", text_color="orange", font=("Consolas", 12))
+        self.lbl_mag.pack(side="right", padx=5)
+
+        # Row 3: Encoders
+        r3 = ctk.CTkFrame(self.frame_telemetry)
+        r3.pack(fill="x", pady=2)
+        self.lbl_enc = ctk.CTkLabel(r3, text="L:0 R:0", font=("Consolas", 11))
+        self.lbl_enc.pack(expand=True)
+        
+        # Row 4: Ultrasonic
+        r4 = ctk.CTkFrame(self.frame_telemetry)
+        r4.pack(fill="x", pady=2)
+        self.lbl_us_fb = ctk.CTkLabel(r4, text="F: - | B: -", font=("Consolas", 11))
         self.lbl_us_fb.pack()
-        self.lbl_us_lr = ctk.CTkLabel(self.frame_sidebar, text="L: - | R: -")
+        self.lbl_us_lr = ctk.CTkLabel(r4, text="L: - | R: -", font=("Consolas", 11))
         self.lbl_us_lr.pack()
 
         # 2. Inspector
@@ -562,14 +673,17 @@ class DashboardApp(ctk.CTk):
         
         if cmd_type == "straight":
             self.add_param_input("Udaljenost (cm):", "val", data)
+            self.add_param_input("Brzina (0-255, 0=Default):", "spd", data)
         elif cmd_type == "move_dual":
             self.add_param_input("Lijevi PWM:", "l", data)
             self.add_param_input("Desni PWM:", "r", data)
             self.add_param_input("Udaljenost (cm, 0=NonStop):", "dist", data)
         elif cmd_type == "turn":
             self.add_param_input("Kut (stupnjevi):", "val", data)
+            self.add_param_input("Brzina (0-255, 0=Default):", "spd", data)
         elif cmd_type == "pivot":
             self.add_param_input("Kut (stupnjevi):", "val", data)
+            self.add_param_input("Brzina (0-255, 0=Default):", "spd", data)
             ctk.CTkLabel(self.inspector_content, text="Poz = Desno, Neg = Lijevo", font=("Arial", 10)).pack()
         elif cmd_type == "arm":
             ctk.CTkLabel(self.inspector_content, text="Pozicija Ruke:").pack(anchor="w", padx=10)
@@ -601,7 +715,7 @@ class DashboardApp(ctk.CTk):
             for key, widget in self.entry_params.items():
                 if isinstance(widget, ctk.CTkEntry):
                     val_str = widget.get()
-                    if key in ["l", "r"]:
+                    if key in ["l", "r", "spd"]:
                          try: payload[key] = int(val_str)
                          except: payload[key] = 0
                     elif key == "dist":
@@ -714,11 +828,15 @@ class DashboardApp(ctk.CTk):
         if hasattr(self, 'latest_telemetry') and self.latest_telemetry:
             d = self.latest_telemetry
             # Update Labels
-            self.lbl_dist.configure(text=f"Distance: {d['cm']} cm | Yaw: {d['yaw']}°")
+            # Update Labels
+            self.lbl_dist.configure(text=f"Dist: {d['cm']} cm")
+            self.lbl_arm.configure(text=f"Arm: {d['arm']}")
+            self.lbl_gyro.configure(text=f"Gyro: {d['gyro']}°")
+            self.lbl_mag.configure(text=f"Mag: {d['yaw']}°")
+            
             self.lbl_enc.configure(text=f"Enc: L={d['pL']} R={d['pR']}")
-            self.lbl_arm.configure(text=f"Arm Preset: {d['arm']}")
-            self.lbl_us_fb.configure(text=f"Front: {d['usF']} | Back: {d['usB']}")
-            self.lbl_us_lr.configure(text=f"Left: {d['usL']} | Right: {d['usR']}")
+            self.lbl_us_fb.configure(text=f"F: {d['usF']} | B: {d['usB']}")
+            self.lbl_us_lr.configure(text=f"L: {d['usL']} | R: {d['usR']}")
             
             # Auto Tab Updates
             if hasattr(self, 'lbl_auto_dist'):
