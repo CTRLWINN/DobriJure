@@ -62,11 +62,40 @@ void voziRavno(float cm) {
 }
 
 // Ostatak funkcija (prazne ili implementirane kasnije)
-// 4. Manualna vožnja (bez distance)
-void vozi(int lijeviMotor, int desniMotor) {
-    // Koristimo scope resolution operator :: jer se argumenti zovu isto kao funkcije u Motori.h
-    ::lijeviMotor(lijeviMotor);
-    ::desniMotor(desniMotor);
+// 4. Manualna vožnja
+// Ako je cm > 0, vozi dok ne prijedje put (blokirajuce).
+// Ako je cm == 0, samo pokreni motore (ne blokira).
+void vozi(int l, int r, float cm) {
+    // 1. Pokreni motore
+    ::lijeviMotor(l);
+    ::desniMotor(r);
+
+    // 2. Ako nema distance, gotovi smo (non-blocking)
+    if (cm <= 0) return;
+
+    // 3. Ako ima distance, cekamo (blocking)
+    resetirajEnkodere();
+    long cilj = abs(cm * IMPULSA_PO_CM);
+    
+    // Safety timeout? Za sad ne, vjerujemo enkoderima.
+    
+    while (true) {
+        long encL = abs(dohvatiLijeviEnkoder());
+        long encR = abs(dohvatiDesniEnkoder());
+        
+        // Gledamo prosjek puta
+        if ((encL + encR) / 2 >= cilj) {
+            break;
+        }
+        
+        delay(1);
+    }
+    
+    stani();
+}
+
+void vozi(int l, int r) {
+    vozi(l, r, 0);
 }
 // --- Funkcije za okretanje (koriste IMU/Žiroskop) ---
 

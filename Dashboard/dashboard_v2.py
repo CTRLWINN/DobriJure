@@ -486,6 +486,9 @@ class DashboardApp(ctk.CTk):
         for lbl, cmd in funcs:
             ctk.CTkButton(self.frame_sidebar, text=lbl, command=lambda c=cmd: self.load_inspector(c)).pack(pady=5, padx=10, fill="x")
 
+        # --- STOP BUTTON ---
+        ctk.CTkButton(self.frame_sidebar, text="STANI (STOP)", fg_color="red", height=50, font=("Arial", 16, "bold"), command=self.stop_robot_now).pack(pady=(20, 5), padx=10, fill="x")
+
         # --- RESET BUTTONS ---
         ctk.CTkLabel(self.frame_sidebar, text="--- Reseti ---", font=("Arial", 12)).pack(pady=(20, 5))
         ctk.CTkButton(self.frame_sidebar, text="RESET ENCODER", fg_color="orange", command=self.reset_encoder_cmd).pack(pady=2, padx=10, fill="x")
@@ -536,8 +539,9 @@ class DashboardApp(ctk.CTk):
 
         # Initialize Mission Steps
         self.misija_koraci = []
+        self.editing_index = None
         
-    def load_inspector(self, cmd_type):
+    def load_inspector(self, cmd_type, data=None):
         for widget in self.inspector_content.winfo_children():
             widget.destroy()
             
@@ -547,14 +551,15 @@ class DashboardApp(ctk.CTk):
         ctk.CTkLabel(self.inspector_content, text=f"Funkcija: {cmd_type.upper()}", font=("Arial", 14, "bold"), text_color="cyan").pack(pady=5)
         
         if cmd_type == "straight":
-            self.add_param_input("Udaljenost (cm):", "val")
+            self.add_param_input("Udaljenost (cm):", "val", data)
         elif cmd_type == "move_dual":
-            self.add_param_input("Lijevi PWM:", "l")
-            self.add_param_input("Desni PWM:", "r")
+            self.add_param_input("Lijevi PWM:", "l", data)
+            self.add_param_input("Desni PWM:", "r", data)
+            self.add_param_input("Udaljenost (cm, 0=NonStop):", "dist", data)
         elif cmd_type == "turn":
-            self.add_param_input("Kut (stupnjevi):", "val")
+            self.add_param_input("Kut (stupnjevi):", "val", data)
         elif cmd_type == "pivot":
-            self.add_param_input("Kut (stupnjevi):", "val")
+            self.add_param_input("Kut (stupnjevi):", "val", data)
             ctk.CTkLabel(self.inspector_content, text="Poz = Desno, Neg = Lijevo", font=("Arial", 10)).pack()
         elif cmd_type == "arm":
             ctk.CTkLabel(self.inspector_content, text="Pozicija Ruke:").pack(anchor="w", padx=10)
@@ -562,34 +567,49 @@ class DashboardApp(ctk.CTk):
                 "BOCA", "KROV_1", "ODLAGANJE_D1", "ODLAGANJE_D2", "ODLAGANJE_D3", "HOME", "DIZANJE_SIGURNO"
             ])
             self.combo_arm.pack(fill="x", padx=10, pady=5)
+            if data and "val" in data: self.combo_arm.set(data["val"])
             self.entry_params["val"] = self.combo_arm
 
-        ctk.CTkButton(self.inspector_content, text="IZVRŠI I DODAJ", command=self.execute_and_add, height=40, font=("Arial", 14, "bold")).pack(pady=20, fill="x", padx=10)
+        btn_text = "SPREMI PROMJENE" if self.editing_index is not None else "IZVRŠI I DODAJ"
+        btn_cmd = self.save_edit if self.editing_index is not None else self.execute_and_add
+        ctk.CTkButton(self.inspector_content, text=btn_text, command=btn_cmd, height=40, font=("Arial", 14, "bold")).pack(pady=20, fill="x", padx=10)
+        
+        if self.editing_index is not None:
+             ctk.CTkButton(self.inspector_content, text="ODUSTANI", fg_color="gray", command=self.cancel_edit).pack(pady=5, fill="x", padx=10)
 
-    def add_param_input(self, label_text, key):
+    def add_param_input(self, label_text, key, data=None):
         ctk.CTkLabel(self.inspector_content, text=label_text).pack(anchor="w", padx=10)
         entry = ctk.CTkEntry(self.inspector_content)
         entry.pack(fill="x", padx=10, pady=5)
+        if data and key in data: return entry.insert(0, str(data[key]))
         self.entry_params[key] = entry
 
-    def execute_and_add(self):
-        if not self.current_cmd_type: return
+    def get_payload_from_ui(self):
+        if not self.current_cmd_type: return None
         payload = {"cmd": self.current_cmd_type}
-        
         try:
             for key, widget in self.entry_params.items():
                 if isinstance(widget, ctk.CTkEntry):
                     val_str = widget.get()
                     if key in ["l", "r"]:
-                         payload[key] = int(val_str)
+                         try: payload[key] = int(val_str)
+                         except: payload[key] = 0
+                    elif key == "dist":
+                         try: payload[key] = float(val_str)
+                         except: payload[key] = 0.0
                     else:
                          try: payload[key] = float(val_str)
                          except: payload[key] = val_str
                 elif isinstance(widget, ctk.CTkOptionMenu):
                     payload[key] = widget.get()
+            return payload
         except ValueError:
             messagebox.showerror("Error", "Greska u brojevima!")
-            return
+            return None
+
+    def execute_and_add(self):
+        payload = self.get_payload_from_ui()
+        if not payload: return
 
         json_str = json.dumps(payload)
         self.robot.send_command(json_str) # Send JSON
@@ -597,15 +617,51 @@ class DashboardApp(ctk.CTk):
         self.misija_koraci.append(payload)
         self.refresh_editor()
 
+    def save_edit(self):
+        if self.editing_index is None: return
+        payload = self.get_payload_from_ui()
+        if not payload: return
+        
+        self.misija_koraci[self.editing_index] = payload
+        self.editing_index = None
+        self.refresh_editor()
+        # Reset inspector
+        for widget in self.inspector_content.winfo_children(): widget.destroy()
+        self.lbl_insp_info = ctk.CTkLabel(self.inspector_content, text="Izmjena Spremljena", text_color="green")
+        self.lbl_insp_info.pack(pady=20)
+
+    def cancel_edit(self):
+        self.editing_index = None
+        self.refresh_editor() # Just to be safe/reset UI state
+        for widget in self.inspector_content.winfo_children(): widget.destroy()
+        self.lbl_insp_info = ctk.CTkLabel(self.inspector_content, text="Izmjena Otkazana", text_color="gray")
+        self.lbl_insp_info.pack(pady=20)
+
+    def edit_step(self, index):
+        if 0 <= index < len(self.misija_koraci):
+            self.editing_index = index
+            step = self.misija_koraci[index]
+            self.load_inspector(step["cmd"], step)
+            self.refresh_editor() # Highlight current editing step? (Optional, skipping for now)
+
     def refresh_editor(self):
         for w in self.scroll_editor.winfo_children():
             w.destroy()
         for i, step in enumerate(self.misija_koraci):
             f = ctk.CTkFrame(self.scroll_editor)
             f.pack(fill="x", pady=2)
-            lbl = ctk.CTkLabel(f, text=f"{i+1}. {step['cmd']}", anchor="w", font=("Consolas", 12))
+            
+            # Format text
+            txt = f"{i+1}. {step['cmd'].upper()}"
+            params = [f"{k}:{v}" for k,v in step.items() if k != "cmd"]
+            if params: txt += f" ({', '.join(params)})"
+            
+            lbl = ctk.CTkLabel(f, text=txt, anchor="w", font=("Consolas", 12))
             lbl.pack(side="left", padx=5)
-            ctk.CTkButton(f, text="X", width=30, fg_color="red", command=lambda idx=i: self.delete_step(idx)).pack(side="right", padx=5)
+            
+            ctk.CTkButton(f, text="X", width=30, fg_color="red", command=lambda idx=i: self.delete_step(idx)).pack(side="right", padx=2)
+            ctk.CTkButton(f, text="E", width=30, fg_color="blue", command=lambda idx=i: self.edit_step(idx)).pack(side="right", padx=2)
+            
             if i > 0: ctk.CTkButton(f, text="▲", width=30, command=lambda idx=i: self.move_step(idx, -1)).pack(side="right", padx=2)
             if i < len(self.misija_koraci)-1: ctk.CTkButton(f, text="▼", width=30, command=lambda idx=i: self.move_step(idx, 1)).pack(side="right", padx=2)
 
@@ -623,6 +679,13 @@ class DashboardApp(ctk.CTk):
     def clear_mission(self):
         self.misija_koraci = []
         self.refresh_editor()
+
+    def stop_robot_now(self):
+        print("STOPPING ROBOT!")
+        self.robot.send_command(json.dumps({"cmd": "stop"}))
+        # Also stop local mission if running
+        if self.mission_running:
+            self.stop_mission()
 
     def update_telemetry(self, data):
         self.latest_telemetry = data

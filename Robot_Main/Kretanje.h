@@ -29,6 +29,15 @@ void okreni(float kut);
  */
 void skreni(float kut);
 
+/**
+ * Vozi zadanim brzinama motora do predene udaljenosti.
+ * BLOKIRAJUCA FUNKCIJA.
+ * @param lijeviMotor Brzina lijevog (-255 do 255)
+ * @param desniMotor Brzina desnog (-255 do 255)
+ * @param cm Udaljenost u cm (prosjek oba kotaca). Ako je 0, vozi beskonacno (ne blokira).
+ */
+void vozi(int lijeviMotor, int desniMotor, float cm);
+
 void postaviKonfigKretanja(float impulsaPoCm);
 void zaustaviKretanje();
 void stani();

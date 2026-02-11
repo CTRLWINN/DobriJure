@@ -55,7 +55,8 @@ void loop() {
                 else if (strcmp(cmd, "move_dual") == 0) {
                     int l = doc["l"];
                     int r = doc["r"];
-                    vozi(l, r);
+                    float dist = doc["dist"] | 0.0; // Default to 0 if missing
+                    vozi(l, r, dist);
                     Serial2.println("{\"status\": \"OK\"}");
                 }
                 else if (strcmp(cmd, "stop") == 0) {
