@@ -41,7 +41,7 @@ void skreni(float kut, int speed = 0);
  */
 void vozi(int lijeviMotor, int desniMotor, float cm);
 
-void postaviParametre(float imp, int brzina, float kp, int minBrzina);
+void postaviParametre(float imp, int brzina, float kp, int minBrzina, float impDeg);
 
 void postaviKonfigKretanja(float impulsaPoCm);
 // Provjerava Serial2 za "stop" naredbu. Vraca true ako je stopiran.
@@ -49,5 +49,7 @@ bool provjeriHitniStop();
 
 void zaustaviKretanje();
 void stani();
+// Helper za slanje telemetrije iz blokirajucih petlji
+extern void posaljiTelemetriju();
 
 #endif

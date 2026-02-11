@@ -5,8 +5,8 @@
 
 // Konfiguracija
 // Konfiguracija
-float IMPULSA_PO_CM = 45;
-float IMPULSA_PO_STUPNJU = 5.9375;
+float IMPULSA_PO_CM = 40;
+float IMPULSA_PO_STUPNJU = 5.3;
 int BAZNA_BRZINA = 200;
 int MIN_BRZINA = 80;
 float Kp_Enc = 2.0; // Pojacanje P-regulatora za sinkronizaciju
@@ -15,26 +15,22 @@ void voziRavno(float cm, int speed) {
     if (cm == 0) return;
 
     resetirajEnkodere();
+    resetirajGyro(); // Reset Gyro za pravocrtnu voznju (Target = 0)
     
     long cilj = abs(cm * IMPULSA_PO_CM);
     int smjer = (cm > 0) ? 1 : -1;
     
     // Parametri za Ramp-Down (Usporavanje)
-    // Zelimo usporavati zadnjih 20% puta ili zadnjih 15cm (sto je manje/vise ovisno o distanci)
-    // Ovdje cemo koristiti fiksni threshold pulsa ako je distanca velika.
     long rampThreshold = cilj * 0.2; // Zadnjih 20%
     if (rampThreshold > (15 * IMPULSA_PO_CM)) rampThreshold = 15 * IMPULSA_PO_CM; // Max 15cm usporavanja
     
-    // int minBrzina = 80;  // Use global MIN_BRZINA
     int maxBrzina = (speed > 0) ? speed : BAZNA_BRZINA; // Use passed speed or default
 
     unsigned long pocetak = millis();
     unsigned long zadnjiPomak = millis();
     long zadnjaPozicija = 0;
     
-    // Timeout: Ako voznja traje predugo (npr. ocekivano + 3 sekunde)
-    // Ocekivano ~ cm / (BAZNA_BRZINA scaled). 
-    // Hard limit: 10 sekundi za debug
+    // Timeout...
     unsigned long timeout = 10000; 
 
     while (true) {
@@ -44,51 +40,52 @@ void voziRavno(float cm, int speed) {
         long preostalo = cilj - trenutniPut;
 
         // 1. Provjera kraja
-        if (preostalo <= 0) {
-            break;
-        }
+        if (preostalo <= 0) break;
         
         // Safety: Emergency Stop from Dashboard
         if (provjeriHitniStop()) break;
         
         // Safety: Timeout
-        if (millis() - pocetak > timeout) {
-             break;
-        }
+        if (millis() - pocetak > timeout) break;
         
-        // Safety: Stall Detection (ako se ne micemo 500ms)
+        // Safety: Stall Detection
         if (abs(trenutniPut - zadnjaPozicija) > (IMPULSA_PO_CM / 2)) {
             zadnjaPozicija = trenutniPut;
             zadnjiPomak = millis();
         } else {
-            if (millis() - zadnjiPomak > 1000) { // 1 sec bez pomaka
-                break;
-            }
+            if (millis() - zadnjiPomak > 1000) break;
         }
         
         // 2. Izracun Brzine (Ramp-Down Profil)
-        int trenutnaBrzina = maxBrzina; // Defaultna brzina ako nismo u ramp-downu
+        int trenutnaBrzina = maxBrzina;
         if (preostalo < rampThreshold) {
-            // Matematika usporavanja:
-            // Mapiramo 'preostalo' (od threshold do 0) u raspon (maxBrzina do minBrzina)
-            // Kad je preostalo == threshold -> brzina = maxBrzina
-            // Kad je preostalo == 0         -> brzina = minBrzina
             trenutnaBrzina = map(preostalo, 0, rampThreshold, MIN_BRZINA, maxBrzina);
         }
 
-        // 3. Sinkronizacija (P-regulator)
-        // Error = Razlika medu enkoderima
-        long error = encL - encR;
-        int korekcija = error * Kp_Enc;
+        // 3. Sinkronizacija (GYRO P-Regulator)
+        // Target kut je 0.
+        float currentAngle = dohvatiKutGyro();
+        // Korekcija: Ako idemo u minus (desno), zelimo ici lijevo (+) -> Pojacati L, smanjiti D?
+        // Ne, ako idemo desno (negativni kut), zelimo skrenuti lijevo.
+        // Lijevi kotac sporije, Desni brze? NE -> To skrece desno jos vise.
+        // Lijevi kotac BRZE, Desni SPORIJE -> Skrece lijevo.
         
-        // Limit korelcije da ne dominira nad usporavanjem
-        if (korekcija > 30) korekcija = 30;
-        if (korekcija < -30) korekcija = -30;
+        // Testiramo obrnutu logiku od prosli put (koja je skrenula ostro lijevo).
+        
+        float Kp_Gyro_Drive = 5.0; // Smanjeno pojacanje
+        // float gyroError = 0 - currentAngle; 
+        // int korekcija = gyroError * Kp_Gyro_Drive;
+        
+        // Jednostavnije: 
+        // korekcija > 0 znaci skreni lijevo?
+        int korekcija = currentAngle * Kp_Gyro_Drive; 
+
+        // Ako je kut pozitivan (Lijevo), korekcija je pozitivna.
+        // Zelimo skrenuti desno -> Lijevi sporije (-), Desni brze (+).
         
         int motL = trenutnaBrzina - korekcija;
         int motR = trenutnaBrzina + korekcija;
         
-        // Limit PWM-a (i osiguraj da ne idemo ispod 0)
         motL = constrain(motL, 0, 255);
         motR = constrain(motR, 0, 255);
         
@@ -102,11 +99,15 @@ void voziRavno(float cm, int speed) {
         }
         
         delay(1); 
+        
+        // Slanje telemetrije tijekom voznje
+        azurirajIMU();
+        posaljiTelemetriju();
     }
     
     // 5. Aktivno kocenje
     motori_koci();
-    delay(500); // Drzi kocnicu 500ms (Povecano radi inercije)
+    delay(1000); // Drzi kocnicu 500ms (Povecano radi inercije)
     stani();    // Oslobodi motor (Coast / High Z)
 }
 
@@ -157,15 +158,20 @@ extern void azurirajIMU();
 void okreni(float kut, int speedArg) {
     if (kut == 0) return;
     
-    resetirajEnkodere();
+    // resetirajEnkodere(); // VISE NE KORISTIMO
+    resetirajGyro(); // KORISTIMO GYRO - Reset na 0
     
-    // 5.9375 impulsa po stupnju
-    long cilj = abs(kut * IMPULSA_PO_STUPNJU);
-    int speed = (speedArg > 0) ? speedArg : BAZNA_BRZINA;
+    // 5.9375 impulsa po stupnju -> NE KORISTIMO
+    // long cilj = abs(kut * IMPULSA_PO_STUPNJU);
+    float ciljKut = abs(kut);
+
+    // int speed = (speedArg > 0) ? speedArg : BAZNA_BRZINA;
+    int speed = 120; // FIKSNA BRZINA ZA OKRETANJE
     
     unsigned long pocetak = millis();
     unsigned long zadnjiPomak = millis();
-    long zadnjaPozicija = 0;
+    // long zadnjaPozicija = 0; // Encoder position
+    float zadnjiKut = 0;
     unsigned long timeout = 10000;
     
     // kut > 0 -> Desno (L naprijed, D nazad)
@@ -173,32 +179,44 @@ void okreni(float kut, int speedArg) {
     int dirL = (kut > 0) ? 1 : -1;
     int dirR = (kut > 0) ? -1 : 1;
 
+    // --- GYRO LOOP ---
     while(true) {
-        long encL = abs(dohvatiLijeviEnkoder());
-        long encR = abs(dohvatiDesniEnkoder());
+        float currKut = abs(dohvatiKutGyro());
+        float preostalo = ciljKut - currKut;
+
+        if (preostalo <= 0) break;
         
-        // Prosjek oba kotaca (apsolutni put)
-        long trenutni = (encL + encR) / 2;
-        
-        if (trenutni >= cilj) break;
-        
+        // Safety: Emergency Stop
         if (provjeriHitniStop()) break;
         
         // Safety: Timeout
         if (millis() - pocetak > timeout) break;
-        
-        // Safety: Stall Detection
-        if (abs(trenutni - zadnjaPozicija) > (IMPULSA_PO_STUPNJU * 5)) {
-            zadnjaPozicija = trenutni;
-            zadnjiPomak = millis();
+
+        // Safety based on Gyro change
+        if (abs(currKut - zadnjiKut) > 1.0) {
+             zadnjiKut = currKut;
+             zadnjiPomak = millis();
         } else {
-             if (millis() - zadnjiPomak > 1000) break; 
+             if (millis() - zadnjiPomak > 2000) break; // 2 sec stall timeout
         }
         
-        lijeviMotor(speed * dirL);
-        desniMotor(speed * dirR);
+        // Ramp-Down Logic
+        int trenutnaBrzina = speed;
+        if (preostalo < 30.0) {
+            trenutnaBrzina = map(preostalo, 0, 30, MIN_BRZINA, speed);
+        }
+        
+        lijeviMotor(trenutnaBrzina * dirL);
+        desniMotor(trenutnaBrzina * dirR);
         delay(1);
+        
+        azurirajIMU();
+        posaljiTelemetriju();
     }
+    
+    // Aktivno kocenje
+    motori_koci();
+    delay(500);
     stani();
 }
 
@@ -211,7 +229,8 @@ void skreni(float kut, int speedArg) {
     // kut > 0 -> Desno (Lijevi vozi)
     // kut < 0 -> Lijevo (Desni vozi)
     
-    int speed = (speedArg > 0) ? speedArg : BAZNA_BRZINA;
+    // int speed = (speedArg > 0) ? speedArg : BAZNA_BRZINA;
+    int speed = 120; // FIKSNA BRZINA ZA SKRETANJE
     
     unsigned long pocetak = millis();
     unsigned long zadnjiPomak = millis();
@@ -249,6 +268,8 @@ void skreni(float kut, int speedArg) {
             desniMotor(speed);
         }
         delay(1);
+        azurirajIMU();
+        posaljiTelemetriju();
     }
     stani();
 }
@@ -262,11 +283,12 @@ void zaustaviKretanje() {
 }
 
 
-void postaviParametre(float imp, int brzina, float kp, int min_brzina) {
+void postaviParametre(float imp, int brzina, float kp, int min_brzina, float impDeg) {
     if (imp > 0) IMPULSA_PO_CM = imp;
     if (brzina > 0) BAZNA_BRZINA = brzina;
     if (kp >= 0) Kp_Enc = kp;
     if (min_brzina >= 0) MIN_BRZINA = min_brzina;
+    if (impDeg > 0) IMPULSA_PO_STUPNJU = impDeg;
 }
 
 bool provjeriHitniStop() {

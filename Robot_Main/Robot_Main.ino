@@ -36,6 +36,7 @@ void setup() {
 
 void loop() {
     ruka.azuriraj();
+    azurirajIMU();
 
     if (Serial2.available()) {
         String msg = Serial2.readStringUntil('\n');
@@ -115,7 +116,8 @@ void loop() {
                     int spd = doc["spd"] | 0;
                     float kp = doc["kp"] | -1.0;
                     int min_spd = doc["min"] | -1;
-                    postaviParametre(imp, spd, kp, min_spd);
+                    float impDeg = doc["deg"] | -1.0;
+                    postaviParametre(imp, spd, kp, min_spd, impDeg);
                     Serial2.println("{\"status\": \"OK\"}");
                 }
                 else if (strcmp(cmd, "reset_enc") == 0) {
@@ -124,7 +126,13 @@ void loop() {
                 }
                 else if (strcmp(cmd, "reset_imu") == 0) {
                     resetirajGyro();
-                    // Optional: Recalibrate mag if needed or just reset angle integration
+                    resetirajMag();
+                    Serial2.println("{\"status\": \"OK\"}");
+                }
+                else if (strcmp(cmd, "cal_imu") == 0) {
+                    kalibrirajGyro();
+                    resetirajGyro();
+                    resetirajMag();
                     Serial2.println("{\"status\": \"OK\"}");
                 }
                 else {
@@ -136,7 +144,11 @@ void loop() {
             }
         }
     }
+    
+    posaljiTelemetriju();
+}
 
+void posaljiTelemetriju() {
     // --- TELEMETRIJA (svakih 200ms) ---
     static unsigned long zadnjaTelemetrija = 0;
     if (millis() - zadnjaTelemetrija > 200) {

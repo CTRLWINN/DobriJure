@@ -29,8 +29,15 @@ class RobotController:
         self.loop = loop
         self.client = None
         self.connected = False
+        self.connected = False
         self.on_telemetry_callback = None
+        self.on_disconnect_callback = None
+        self.on_disconnect_callback = None
         self.rx_buffer = ""
+        
+        # Sync control
+        self.response_event = threading.Event()
+        self.last_response = None
 
     async def connect_ble(self):
         print("Skeniram BLE uređaje...")
@@ -46,7 +53,7 @@ class RobotController:
             return False
 
         print(f"Povezivanje na {target.name}...")
-        self.client = BleakClient(target.address)
+        self.client = BleakClient(target.address, disconnected_callback=self.handle_disconnect)
         
         try:
             await self.client.connect()
@@ -65,10 +72,16 @@ class RobotController:
             self.connected = False
             print("BLE Odspojeno.")
 
+    def handle_disconnect(self, client):
+        print("BLE Disconnected event!")
+        self.connected = False
+        if self.on_disconnect_callback:
+            self.on_disconnect_callback()
+
     def notification_handler(self, sender, data):
         try:
             chunk = data.decode('utf-8', errors='ignore')
-            # print(f"DEBUG RX CHUNK: {repr(chunk)}") # Configurable debug
+            print(f"DEBUG RX CHUNK: {repr(chunk)}") # Configurable debug
             self.rx_buffer += chunk
             
             if "\n" in self.rx_buffer:
@@ -95,13 +108,20 @@ class RobotController:
                                 }
                                 if self.on_telemetry_callback:
                                     self.on_telemetry_callback(data_dict)
-                                # print("Telemetry OK") 
-                        except Exception as e:
-                            print(f"Parse Error '{line}': {e}")
-
-                    elif not line.startswith("DEBUG"): 
-                        print(f"RX: {line}")
-                            
+                        except: pass
+                    
+                    elif "{" in line and "}" in line:
+                         # Likely JSON response
+                         try:
+                             start = line.find("{")
+                             end = line.rfind("}") + 1
+                             json_str = line[start:end]
+                             data = json.loads(json_str)
+                             if "status" in data:
+                                 self.last_response = data
+                                 self.response_event.set()
+                         except: pass
+                         
                 self.rx_buffer = lines[-1]
                 
         except Exception as e:
@@ -110,6 +130,17 @@ class RobotController:
     def send_command(self, cmd):
         if self.connected and self.client:
              asyncio.run_coroutine_threadsafe(self.write_ble(cmd), self.loop)
+
+    def send_command_and_wait(self, cmd, timeout=15.0):
+        self.response_event.clear()
+        self.last_response = None
+        
+        self.send_command(cmd)
+        
+        # Wait for response
+        if self.response_event.wait(timeout):
+            return self.last_response
+        return None
 
     async def write_ble(self, cmd):
         if self.client and self.connected:
@@ -209,6 +240,7 @@ class DashboardApp(ctk.CTk):
         threading.Thread(target=self.start_async_loop, daemon=True).start()
 
         self.robot = RobotController(self.loop)
+        self.robot.on_disconnect_callback = self.on_ble_disconnect
         
         # Layout
         self.grid_columnconfigure(1, weight=1)
@@ -238,7 +270,7 @@ class DashboardApp(ctk.CTk):
         self.tabview = ctk.CTkTabview(self)
         self.tabview.grid(row=0, column=1, padx=20, pady=20, sticky="nsew")
         
-        self.tab_calib = self.tabview.add("Kalibracija")
+        self.tab_calib = self.tabview.add("Kalibracija kamere")
         self.tab_manual = self.tabview.add("Učenje (Manual)")
         self.tab_auto = self.tabview.add("Autonomno")
         
@@ -297,32 +329,14 @@ class DashboardApp(ctk.CTk):
             print(f"Popup error: {e}")
 
     def setup_calibration_tab(self):
-        # 3 Columns
+        # Just Camera & Vision on this tab
         frame = self.tab_calib
-        col1 = ctk.CTkFrame(frame)
-        col1.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+        
+        # Center container
         col2 = ctk.CTkFrame(frame)
-        col2.pack(side="left", fill="both", expand=True, padx=5, pady=5)
-        col3 = ctk.CTkFrame(frame)
-        col3.pack(side="left", fill="both", expand=True, padx=5, pady=5)
-        
-        # --- COLUMN 1: LOGIKA & MOTORI ---
-        ctk.CTkLabel(col1, text="PID & Motori", font=("Arial", 16, "bold")).pack(pady=5)
-        
-        # PID
-        self.entry_kp = self.create_input(col1, "Kp:")
-        self.entry_ki = self.create_input(col1, "Ki:")
-        self.entry_kd = self.create_input(col1, "Kd:")
-        
-        ctk.CTkLabel(col1, text="Motori Config", font=("Arial", 12, "bold")).pack(pady=(10,5))
-        self.entry_pulses = self.create_input(col1, "Pulse/cm:")
-        self.entry_pulses.insert(0, "40.0")
-        self.entry_speed = self.create_input(col1, "Brzina:")
-        self.entry_speed.insert(0, "100")
-        
-        ctk.CTkButton(col1, text="Spremi Config (PID/Motor)", command=self.save_config).pack(pady=10)
+        col2.pack(fill="both", expand=True, padx=20, pady=20)
 
-        # --- COLUMN 2: VIZIJA ---
+        # --- VIZIJA ---
         ctk.CTkLabel(col2, text="Kamera & Boje", font=("Arial", 16, "bold")).pack(pady=5)
         
         # Nicla WiFi Status (Calibration Tab)
@@ -364,43 +378,6 @@ class DashboardApp(ctk.CTk):
             self.lab_vars[label] = entry
             
         ctk.CTkButton(col2, text="Pošalji Boje (SET)", command=self.send_color).pack(pady=5)
-        
-        # --- COLUMN 3: ROBOTSKA RUKA ---
-        ctk.CTkLabel(col3, text="Manipulator", font=("Arial", 16, "bold")).pack(pady=5)
-        
-        # Presets
-        self.preset_names = [
-            "Parkiraj", "Voznja", "Uzmi_Boca", "Uzmi_Limenka", "Uzmi_Spuzva",
-            "Spremi_1", "Spremi_2", "Spremi_3",
-            "Iz_Sprem_1", "Iz_Sprem_2", "Iz_Sprem_3",
-            "Dostava_1", "Dostava_2", "Dostava_3", "Extra"
-        ]
-        self.combo_preset = ctk.CTkComboBox(col3, values=self.preset_names)
-        self.combo_preset.pack(pady=5)
-        
-        row_preset = ctk.CTkFrame(col3)
-        row_preset.pack(pady=5)
-        ctk.CTkButton(row_preset, text="Učitaj Preset", width=80, command=self.load_preset).pack(side="left", padx=5)
-        ctk.CTkButton(row_preset, text="Spremi Preset", width=80, fg_color="orange", command=self.save_preset).pack(side="left", padx=5)
-        
-        # Sliders for 6 Servos
-        self.sliders = []
-        self.servo_entries = [] # To update text on preset load
-        servo_names = ["Baza", "Rame", "Lakat", "Zglob", "Rot", "Hvat"]
-        
-        for i in range(6):
-            max_angle = 360 if i == 0 else 180
-            self.create_servo_control(col3, i, servo_names[i], max_angle)
-
-        # --- POSTAVKE KRETANJA (Ispod manipulatora) ---
-        ctk.CTkLabel(col3, text="Postavke Kretanja", font=("Arial", 16, "bold")).pack(pady=(20,5))
-        f_move = ctk.CTkFrame(col3)
-        f_move.pack(fill="x", padx=5, pady=5)
-        
-        self.entry_imp = self.create_config_row(f_move, "Imp/cm:", "50", self.send_imp)
-        self.entry_spd = self.create_config_row(f_move, "Brzina:", "200", self.send_spd)
-        self.entry_min = self.create_config_row(f_move, "Min Brz:", "80", self.send_min)
-        self.entry_kp  = self.create_config_row(f_move, "Kp:", "2.0", self.send_kp)
 
     def create_servo_control(self, parent, idx, name, max_angle=180):
         f = ctk.CTkFrame(parent)
@@ -462,6 +439,13 @@ class DashboardApp(ctk.CTk):
             print(f"Sent Imp: {val}")
         except: pass
 
+    def send_deg(self):
+        try:
+            val = float(self.entry_deg.get())
+            self.robot.send_command(json.dumps({"cmd": "set_move_cfg", "deg": val}))
+            print(f"Sent Deg: {val}")
+        except: pass
+
     def send_spd(self):
         try:
             val = int(self.entry_spd.get())
@@ -486,6 +470,7 @@ class DashboardApp(ctk.CTk):
     def send_move_cfg(self):
         try:
             imp = float(self.entry_imp.get())
+            deg = float(self.entry_deg.get())
             spd = int(self.entry_spd.get())
             min_spd = int(self.entry_min.get())
             kp = float(self.entry_kp.get())
@@ -493,6 +478,7 @@ class DashboardApp(ctk.CTk):
             payload = {
                 "cmd": "set_move_cfg",
                 "imp": imp,
+                "deg": deg,
                 "spd": spd,
                 "min": min_spd,
                 "kp": kp
@@ -579,7 +565,8 @@ class DashboardApp(ctk.CTk):
         # --- RESET BUTTONS ---
         ctk.CTkLabel(self.frame_sidebar, text="--- Reseti ---", font=("Arial", 12)).pack(pady=(20, 5))
         ctk.CTkButton(self.frame_sidebar, text="RESET ENCODER", fg_color="orange", command=self.reset_encoder_cmd).pack(pady=2, padx=10, fill="x")
-        ctk.CTkButton(self.frame_sidebar, text="RESET IMU", fg_color="orange", command=self.reset_imu_cmd).pack(pady=2, padx=10, fill="x")
+        ctk.CTkButton(self.frame_sidebar, text="KALIBRIRAJ IMU", fg_color="orange", command=self.calibrate_imu_cmd).pack(pady=2, padx=10, fill="x")
+        ctk.CTkButton(self.frame_sidebar, text="RESET KUT (0°)", fg_color="blue", command=self.reset_angle_cmd).pack(pady=2, padx=10, fill="x")
 
         # --- TELEMETRY BEAUTIFICATION ---
         ctk.CTkLabel(self.frame_sidebar, text="--- Telemetrija ---", font=("Arial", 14, "bold")).pack(pady=(20, 5))
@@ -623,7 +610,56 @@ class DashboardApp(ctk.CTk):
         self.frame_inspector.grid(row=0, column=1, sticky="nsew", padx=2, pady=2)
         
         ctk.CTkLabel(self.frame_inspector, text="INSPECTOR", font=("Arial", 16, "bold")).pack(pady=10)
+
+        # --- DNO INSPECTORA: Postavke i Manipulator ---
+        self.frame_bottom_inspector = ctk.CTkFrame(self.frame_inspector, height=280)
+        self.frame_bottom_inspector.pack(side="bottom", fill="x", padx=5, pady=5)
         
+        # Lijevo: Postavke Kretanja
+        self.frame_move = ctk.CTkFrame(self.frame_bottom_inspector)
+        self.frame_move.pack(side="left", fill="both", expand=True, padx=2, pady=2)
+        
+        ctk.CTkLabel(self.frame_move, text="Postavke Kretanja", font=("Arial", 12, "bold")).pack(pady=2)
+        self.entry_imp = self.create_config_row(self.frame_move, "Imp/cm:", "40", self.send_imp)
+        self.entry_deg = self.create_config_row(self.frame_move, "Imp/Deg:", "5.3", self.send_deg)
+        self.entry_spd = self.create_config_row(self.frame_move, "Brzina:", "200", self.send_spd)
+        self.entry_min = self.create_config_row(self.frame_move, "Min Brz:", "80", self.send_min)
+        self.entry_kp  = self.create_config_row(self.frame_move, "Kp:", "2.0", self.send_kp)
+
+        # Desno: Manipulator
+        self.frame_manip = ctk.CTkFrame(self.frame_bottom_inspector)
+        self.frame_manip.pack(side="right", fill="both", expand=True, padx=2, pady=2)
+        
+        ctk.CTkLabel(self.frame_manip, text="Manipulator", font=("Arial", 12, "bold")).pack(pady=2)
+        
+        # Preseti
+        self.preset_names = [
+            "Parkiraj", "Voznja", "Uzmi_Boca", "Uzmi_Limenka", "Uzmi_Spuzva",
+            "Spremi_1", "Spremi_2", "Spremi_3",
+            "Iz_Sprem_1", "Iz_Sprem_2", "Iz_Sprem_3",
+            "Dostava_1", "Dostava_2", "Dostava_3", "Extra"
+        ]
+        self.combo_preset = ctk.CTkComboBox(self.frame_manip, values=self.preset_names)
+        self.combo_preset.pack(pady=2)
+        
+        row_preset = ctk.CTkFrame(self.frame_manip)
+        row_preset.pack(pady=2)
+        ctk.CTkButton(row_preset, text="Učitaj", width=60, command=self.load_preset).pack(side="left", padx=2)
+        ctk.CTkButton(row_preset, text="Spremi", width=60, fg_color="orange", command=self.save_preset).pack(side="left", padx=2)
+
+        # Slideri
+        self.sliders = []
+        self.servo_entries = []
+        servo_names = ["Baza", "Rame", "Lakat", "Zglob", "Rot", "Hvat"]
+        
+        self.frame_sliders = ctk.CTkScrollableFrame(self.frame_manip, height=150)
+        self.frame_sliders.pack(fill="both", expand=True, padx=2)
+
+        for i in range(6):
+            max_angle = 360 if i == 0 else 180
+            self.create_servo_control(self.frame_sliders, i, servo_names[i], max_angle)
+
+        # Content Inspector (Gornji dio)
         self.inspector_content = ctk.CTkFrame(self.frame_inspector, fg_color="transparent")
         self.inspector_content.pack(fill="both", expand=True, padx=5, pady=5)
         
@@ -997,44 +1033,26 @@ class DashboardApp(ctk.CTk):
                 time.sleep(ms / 1000.0)
                 continue
 
-            # Send Command to Robot
-            self.robot.send_command(json.dumps(payload))
+            # Send Command & Wait for Completion (Sync Mode)
+            # straight, turn, pivot, move_dual -> firmware BLOCKS until done, then sends JSON.
             
-            # Blocking Logic based on Command Type
-            if cmd_type == "straight":
-                target = float(payload.get("val", 0))
-                # Wait for distance (Telemetry)
-                time.sleep(0.5) # Allow start
-                start_time = time.time()
-                while self.mission_running:
-                    if time.time() - start_time > 10: break # Timeout 10s
-                    try:
-                        curr = float(self.latest_telemetry.get('cm', 0))
-                        # Check if within tolerance (e.g. 2cm)
-                        # Note: 'cm' from robot is cumulative or reset? 
-                        # Robot 'voziRavno' RESETS encoders/distance at start.
-                        # So telemetry 'cm' should grow from 0 to target.
-                        if abs(curr) >= abs(target) - 2:
-                            break
-                    except: pass
-                    time.sleep(0.1)
-                time.sleep(0.5)
-
+            json_payload = json.dumps(payload)
+            
+            if cmd_type in ["straight", "turn", "pivot", "move_dual"]:
+                # Wait for "DONE" or "OK"
+                resp = self.robot.send_command_and_wait(json_payload, timeout=20.0)
+                if not resp:
+                    print(f"Command {cmd_type} timed out!")
+                # Move to next step immediately after response
+                
             elif cmd_type == "arm":
-                # Wait fixed time for arm
+                self.robot.send_command(json_payload)
+                # Wait fixed time for arm physical movement (firmware is non-blocking)
                 time.sleep(2.0)
-            
-            elif cmd_type in ["turn", "pivot"]:
-                 # Wait fixed time (approximate) or check Yaw
-                 # For now, fixed delay proportional to angle is safest without advanced yaw logic
-                 val = float(payload.get("val", 0))
-                 wait_time = abs(val) / 45.0 # Approx 1 sec per 45 deg?
-                 if wait_time < 1.0: wait_time = 1.0
-                 time.sleep(wait_time)
-
-            elif cmd_type == "move_dual":
-                # Manual move, non-blocking default
-                pass
+                
+            else:
+                # Other commands (e.g. stop, reset)
+                self.robot.send_command(json_payload)
 
         self.mission_running = False
         self.lbl_auto_status.configure(text="STATUS: DONE", text_color="blue")
@@ -1117,8 +1135,12 @@ class DashboardApp(ctk.CTk):
     def reset_encoder_cmd(self):
         self.robot.send_command('{"cmd": "reset_enc"}')
         
-    def reset_imu_cmd(self):
-        self.robot.send_command('{"cmd": "cal_imu"}')
+    def calibrate_imu_cmd(self):
+        if messagebox.askyesno("Kalibracija", "Robot mora potpuno mirovati 2 sekunde. Nastaviti?"):
+            self.robot.send_command(json.dumps({"cmd": "cal_imu"}))
+
+    def reset_angle_cmd(self):
+        self.robot.send_command(json.dumps({"cmd": "reset_imu"}))
 
     def load_mission(self):
         try:
@@ -1135,6 +1157,13 @@ class DashboardApp(ctk.CTk):
             
         except Exception as e:
             messagebox.showerror("Error", f"Could not load: {e}")
+
+    def on_ble_disconnect(self):
+        self.after(0, self._handle_disconnect_ui)
+
+    def _handle_disconnect_ui(self):
+        self.btn_connect.configure(text="Connect BLE (HC-02)", fg_color=["#3B8ED0", "#1F6AA5"]) 
+        messagebox.showwarning("Veza Prekinuta", "Robot je odspojen!")
 
 if __name__ == "__main__":
     app = DashboardApp()
