@@ -16,36 +16,54 @@ void voziRavno(float cm) {
     long cilj = abs(cm * IMPULSA_PO_CM);
     int smjer = (cm > 0) ? 1 : -1;
     
-    // Pocetna brzina
-    int brzina = BAZNA_BRZINA;
+    // Parametri za Ramp-Down (Usporavanje)
+    // Zelimo usporavati zadnjih 20% puta ili zadnjih 15cm (sto je manje/vise ovisno o distanci)
+    // Ovdje cemo koristiti fiksni threshold pulsa ako je distanca velika.
+    long rampThreshold = cilj * 0.2; // Zadnjih 20%
+    if (rampThreshold > (15 * IMPULSA_PO_CM)) rampThreshold = 15 * IMPULSA_PO_CM; // Max 15cm usporavanja
     
+    int minBrzina = 60;  // Minimalna brzina da motori ne stanu prerano
+    int maxBrzina = BAZNA_BRZINA; // Npr. 200
+
     while (true) {
-        long L = abs(dohvatiLijeviEnkoder());
-        long R = abs(dohvatiDesniEnkoder());
-        
+        long encL = abs(dohvatiLijeviEnkoder());
+        long encR = abs(dohvatiDesniEnkoder());
+        long trenutniPut = (encL + encR) / 2;
+        long preostalo = cilj - trenutniPut;
+
         // 1. Provjera kraja
-        if ((L + R) / 2 >= cilj) {
+        if (preostalo <= 0) {
             break;
         }
         
-        // 2. Sinkronizacija (P-regulator)
+        // 2. Izracun Brzine (Ramp-Down Profil)
+        int trenutnaBrzina = maxBrzina;
+        
+        if (preostalo < rampThreshold) {
+            // Matematika usporavanja:
+            // Mapiramo 'preostalo' (od threshold do 0) u raspon (maxBrzina do minBrzina)
+            // Kad je preostalo == threshold -> brzina = maxBrzina
+            // Kad je preostalo == 0         -> brzina = minBrzina
+            trenutnaBrzina = map(preostalo, 0, rampThreshold, minBrzina, maxBrzina);
+        }
+
+        // 3. Sinkronizacija (P-regulator)
         // Error = Razlika medu enkoderima
-        // Ako je L > R, error je pozitivan -> L treba usporiti.
-        long error = L - R;
+        long error = encL - encR;
         int korekcija = error * Kp_Enc;
         
-        // Limit korekcije da ne divlja
-        if (korekcija > 50) korekcija = 50;
-        if (korekcija < -50) korekcija = -50;
+        // Limit korelcije da ne dominira nad usporavanjem
+        if (korekcija > 30) korekcija = 30;
+        if (korekcija < -30) korekcija = -30;
         
-        int motL = brzina - korekcija;
-        int motR = brzina + korekcija;
+        int motL = trenutnaBrzina - korekcija;
+        int motR = trenutnaBrzina + korekcija;
         
-        // Limit PWM-a
-        if (motL > 255) motL = 255; if (motL < 0) motL = 0;
-        if (motR > 255) motR = 255; if (motR < 0) motR = 0;
+        // Limit PWM-a (i osiguraj da ne idemo ispod 0)
+        motL = constrain(motL, 0, 255);
+        motR = constrain(motR, 0, 255);
         
-        // 3. Pogon
+        // 4. Pogon
         if (smjer > 0) {
             lijeviMotor(motL);
             desniMotor(motR);
@@ -54,11 +72,13 @@ void voziRavno(float cm) {
             desniMotor(-motR);
         }
         
-        // Kratka pauza za stabilnost petlje (opcionalno, ali dobro za debounce enkodera u ispisu)
         delay(1); 
     }
     
-    stani();
+    // 5. Aktivno kocenje
+    motori_koci();
+    delay(100); // Drzi kocnicu 100ms
+    stani();    // Oslobodi motor (Coast / High Z)
 }
 
 // Ostatak funkcija (prazne ili implementirane kasnije)

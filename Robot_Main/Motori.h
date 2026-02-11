@@ -27,4 +27,10 @@ void desniMotor(int brzina);
  */
 void motori_stani();
 
+/**
+ * Aktivno kocenje (kratki spoj motora).
+ * Postavlja IN pinove na LOW, a PWM na HIGH.
+ */
+void motori_koci();
+
 #endif // MOTORI_H

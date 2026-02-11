@@ -120,4 +120,11 @@ extern const char* presetNames[];
  */
 void inicijalizirajHardware();
 
+// --- SENZORI ---
+long ocitajPrednjiUZ();
+long ocitajStraznjiUZ();
+long ocitajLijeviUZ();
+long ocitajDesniUZ();
+bool ocitajInduktivni(); // True = metal detect (LOW signal usually)
+
 #endif // HARDWAREMAP_H

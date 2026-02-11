@@ -87,3 +87,26 @@ void inicijalizirajHardware() {
     
     Serial.println("Hardver inicijaliziran.");
 }
+
+// Helper za UZ
+long izmjeriUZ(int trig, int echo) {
+    digitalWrite(trig, LOW);
+    delayMicroseconds(2);
+    digitalWrite(trig, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(trig, LOW);
+    
+    long duration = pulseIn(echo, HIGH, 30000); // 30ms timeout (~5m)
+    if (duration == 0) return -1; // Timeout
+    return duration * 0.034 / 2;
+}
+
+long ocitajPrednjiUZ() { return izmjeriUZ(PIN_US_FRONT_TRIG, PIN_US_FRONT_ECHO); }
+long ocitajStraznjiUZ() { return izmjeriUZ(PIN_US_BACK_TRIG, PIN_US_BACK_ECHO); }
+long ocitajLijeviUZ()  { return izmjeriUZ(PIN_US_LEFT_TRIG, PIN_US_LEFT_ECHO); }
+long ocitajDesniUZ()   { return izmjeriUZ(PIN_US_RIGHT_TRIG, PIN_US_RIGHT_ECHO); }
+
+bool ocitajInduktivni() {
+    // Induktivni senzor (NPN) daje LOW kada detektira metal
+    return digitalRead(PIN_INDUCTIVE_SENS) == LOW; 
+}

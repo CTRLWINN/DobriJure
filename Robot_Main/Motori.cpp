@@ -42,3 +42,15 @@ void motori_stani() {
     lijeviMotor(0);
     desniMotor(0);
 }
+
+void motori_koci() {
+    // Lijevi
+    digitalWrite(PIN_MOTOR_L_IN1, LOW);
+    digitalWrite(PIN_MOTOR_L_IN2, LOW);
+    analogWrite(PIN_MOTOR_L_PWM, 255); // Full enable for braking
+    
+    // Desni
+    digitalWrite(PIN_MOTOR_R_IN1, LOW);
+    digitalWrite(PIN_MOTOR_R_IN2, LOW);
+    analogWrite(PIN_MOTOR_R_PWM, 255); // Full enable for braking
+}

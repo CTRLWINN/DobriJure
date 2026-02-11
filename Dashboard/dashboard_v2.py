@@ -540,6 +540,16 @@ class DashboardApp(ctk.CTk):
         # Initialize Mission Steps
         self.misija_koraci = []
         self.editing_index = None
+
+        self.CMD_TRANSLATIONS = {
+            "straight": "VOZI RAVNO",
+            "move_dual": "VOZI (L/D)",
+            "turn": "OKRENI (Spot)",
+            "pivot": "SKRENI (Pivot)",
+            "arm": "RUKA",
+            "wait": "ČEKAJ",
+            "stop": "STANI"
+        }
         
     def load_inspector(self, cmd_type, data=None):
         for widget in self.inspector_content.winfo_children():
@@ -652,9 +662,19 @@ class DashboardApp(ctk.CTk):
             f.pack(fill="x", pady=2)
             
             # Format text
-            txt = f"{i+1}. {step['cmd'].upper()}"
-            params = [f"{k}:{v}" for k,v in step.items() if k != "cmd"]
-            if params: txt += f" ({', '.join(params)})"
+            cmd_key = step.get('cmd', '???')
+            cmd_name = self.CMD_TRANSLATIONS.get(cmd_key, cmd_key.upper())
+            
+            txt = f"{i+1}. {cmd_name}"
+            
+            # Filter out 'cmd' from parameters
+            params = []
+            for k, v in step.items():
+                if k != "cmd":
+                    params.append(f"{k}:{v}")
+            
+            if params:
+                txt += f" ({', '.join(params)})"
             
             lbl = ctk.CTkLabel(f, text=txt, anchor="w", font=("Consolas", 12))
             lbl.pack(side="left", padx=5)

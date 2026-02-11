@@ -113,4 +113,41 @@ void loop() {
             }
         }
     }
+
+    // --- TELEMETRIJA (svakih 200ms) ---
+    static unsigned long zadnjaTelemetrija = 0;
+    if (millis() - zadnjaTelemetrija > 200) {
+        zadnjaTelemetrija = millis();
+        
+        long encL = dohvatiLijeviEnkoder();
+        long encR = dohvatiDesniEnkoder();
+        // Distance je prosjek (u cm), ali HardwareMap.cpp ima IMPULSE_PO_CM pa mozemo izracunati ili samo poslati raw.
+        // Dashboard ocekuje 'cm', poslat cemo (L+R)/2 / 42.85 (tvrdo kodirano ili extern).
+        // Bolje raw pa neka dash racuna, ali protokol trazi cm.
+        float cm = (encL + encR) / 2.0 / 42.85; // Approx
+        
+        int armIdx = ruka.dohvatiCiljaniPreset();
+        
+        long usF = ocitajPrednjiUZ();
+        long usB = ocitajStraznjiUZ();
+        long usL = ocitajLijeviUZ();
+        long usR = ocitajDesniUZ();
+        
+        bool ind = ocitajInduktivni();
+        
+        float yaw = dohvatiYaw(); // Ili dohvatiKutGyro() ovisno sto zelimo
+        
+        // Format: STATUS:cm,pL,pR,armIdx,usF,usB,usL,usR,ind,yaw
+        Serial2.print("STATUS:");
+        Serial2.print(cm, 1); Serial2.print(",");
+        Serial2.print(encL); Serial2.print(",");
+        Serial2.print(encR); Serial2.print(",");
+        Serial2.print(armIdx); Serial2.print(",");
+        Serial2.print(usF); Serial2.print(",");
+        Serial2.print(usB); Serial2.print(",");
+        Serial2.print(usL); Serial2.print(",");
+        Serial2.print(usR); Serial2.print(",");
+        Serial2.print(ind ? "1" : "0"); Serial2.print(",");
+        Serial2.println(yaw, 1);
+    }
 }
