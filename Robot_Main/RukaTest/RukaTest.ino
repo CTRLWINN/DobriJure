@@ -44,7 +44,7 @@ int pretvoriStupnjeveUPulseve(int stupnjevi, int maxStupnjeva) {
 /**
  * Funkcija za lagano pomicanje robota iz jedne pozicije u drugu
  */
-void premjestiRobot(int* pocetnaPoz, int* ciljnaPoz, int brojKoraka = 150, int pauzaPoKorakuMs = 20) {
+void premjestiRuku(int* pocetnaPoz, int* ciljnaPoz, int brojKoraka = 150, int pauzaPoKorakuMs = 20) {
   int startBaza = pretvoriStupnjeveUPulseve(pocetnaPoz[0], 270);
   int startRame = pretvoriStupnjeveUPulseve(pocetnaPoz[1], 180);
   int startLakat = pretvoriStupnjeveUPulseve(pocetnaPoz[2], 180);
@@ -91,21 +91,5 @@ void setup() {
 }
 
 void loop() {
-  Serial.println("Krećem s PARKING na POZICIJU 1...");
-  premjestiRobot(pozicijaParking, pozicija1);
-  delay(2000);
-
-  Serial.println("Krećem s POZICIJE 1 na POZICIJU 2...");
-  premjestiRobot(pozicija1, pozicija2);
-  delay(2000);
-
-  Serial.println("Krećem s POZICIJE 2 na POZICIJU 3...");
-  premjestiRobot(pozicija2, pozicija3);
-  delay(2000);
-
-  Serial.println("Povratak s POZICIJE 3 na PARKING...");
-  premjestiRobot(pozicija3, pozicijaParking);
-  
-  Serial.println("Ciklus zavrsen. Cekam 3 sekunde prije ponavljanja...");
-  delay(3000);
+ 
 }

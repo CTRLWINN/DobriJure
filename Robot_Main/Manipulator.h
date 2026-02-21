@@ -13,100 +13,60 @@
 #include "HardwareMap.h"
 
 // --- KONFIGURACIJA I KONSTANTE ---
-#define OMJER_PRIJENOSA_BAZA 2.0 // Omjer zupčanika na bazi (2:1)
-#define SERVO_MIN 150            // Min PWM puls (cca 0 stupnjeva)
-#define SERVO_MAX 600            // Max PWM puls (cca 180 stupnjeva)
-#define KORAK_MK 1.0             // Korak pomaka (Soft-Start brzina)
+#define SERVO_MIN 500            // Min PWM puls (500us)
+#define SERVO_MAX 2500           // Max PWM puls (2500us)
+#define KORAK_MK 1.5             // Brzina kretanja (stupnjeva po koraku)
 
-// Kutovi za spremanje predmeta (Krov & Odlaganje)
-#define KUT_KROV_SLOT_1    10.0   // Slot 1 na krovu
-#define KUT_KROV_SLOT_2    170.0  // Slot 2 na krovu
-#define KUT_ODLAGANJE_D1   45.0   // Lijevi spremnik
-#define KUT_ODLAGANJE_D2   90.0   // Srednji spremnik
-#define KUT_ODLAGANJE_D3   135.0  // Desni spremnik
+// Kanali prema RukaTest.ino
+#define CH_BAZA      0
+#define CH_RAME      1
+#define CH_LAKAT     2
+#define CH_ZGLOB     3
+#define CH_HVATALJKA 4
 
-// Poza za vožnju (Kamera gleda dolje pod 45 stupnjeva)
-#define KUT_POZA_VOZNJA_RAME  135.0
-#define KUT_POZA_VOZNJA_LAKAT 90.0
-#define KUT_POZA_VOZNJA_ZGLOB 135.0 // Kompenzacija za 45 stupnjeva
-#define KUT_POZA_VOZNJA_BAZA  90.0  // Ravno naprijed
+// Pozicije
+const int pozicijaParking[5] = {135, 145, 25, 90, 90};
 
 // Stanja za State Machine (Hrvatski)
 enum StanjeRuke {
     STANJE_MIRUJE,
-    STANJE_DIZANJE_SIGURNO,
-    STANJE_ROTACIJA_BAZE,
-    STANJE_SPUSTANJE,
-    STANJE_ISPUSTANJE,
-    STANJE_POVRATAK,
+    STANJE_PARKIRANJE,
     // Sekvencijalna stanja za orkestraciju
-    STANJE_SEK_PRIPREMA, // Odlazak na poziciju iznad (Rame/Lakat)
-    STANJE_SEK_SPUSTANJE, // Spustanje Z-osi (Rame/Lakat dolje)
-    STANJE_SEK_HVATANJE, // Zatvaranje hvataljke
-    STANJE_SEK_DIZANJE,   // Dizanje gore
-    STANJE_SEK_SPREMANJE  // Rotacija u spremnik
+    STANJE_SEK_PRIPREMA,  // Odlazak na poziciju iznad
+    STANJE_SEK_SPUSTANJE, 
+    STANJE_SEK_HVATANJE, 
+    STANJE_SEK_DIZANJE,   
+    STANJE_SEK_SPREMANJE  
 };
 
 class Manipulator {
 private:
-    // Trenutni kutovi (stvarna pozicija serva)
-    float trenutniKutovi[7];
-    // Ciljani kutovi (željena pozicija)
-    float ciljaniKutovi[7];
+    float trenutniKutovi[5];
+    float ciljaniKutovi[5];
+    float brzine[5]; // Brzina za svaki servo za sinkronizirano kretanje
 
-    // State Machine varijable
     StanjeRuke trenutnoStanje;
     String tipSekvence; 
-    int ciljaniPresetIndex;
-    unsigned long zadnjeVrijeme; // Za tajming ako zatreba
+    unsigned long zadnjeVrijeme;
 
-    /**
-     * Pomoćna funkcija za mapiranje kuta u PWM vrijednost.
-     */
-    int kutU_PWM(float kut);
-
-    /**
-     * Provjerava jesu li svi motori stigli na cilj.
-     */
+    int kutU_Pulseve(int kanal, float kut);
     bool jesuLiMotoriStigli();
 
 public:
     Manipulator();
 
-    void primjeniPreset(int idx);
+    /**
+     * Postavlja ruku u zadanu poziciju (niz od 5 kutova).
+     * Izračunava brzine za sinkronizirano kretanje (kao premjestiRobot).
+     */
+    void postaviPoziciju(const int poz[5]);
 
-    /**
-     * Postavlja ciljani kut za određeni kanal.
-     * Implementira logiku prijenosnog omjera za bazu.
-     */
     void postaviKut(int kanal, float stupnjevi);
-    
-    /**
-     * Vraća trenutni kut serva.
-     */
     float dohvatiKut(int kanal);
     
-    int dohvatiCiljaniPreset();
-
-    /**
-     * Glavna petlja za ažuriranje.
-     * Pozivati u loop().
-     * Odrađuje Soft-Start (postepeno pomicanje) i State Machine.
-     */
     void azuriraj();
-
-    /**
-     * Započinje sekvencu (spremanje ili odlaganje).
-     * @param sekvenca - npr. "krov1", "odlozi_d1"
-     */
     void zapocniSekvencu(String sekvenca);
-
-    /**
-     * Postavlja ruku u stabilnu pozu za vožnju.
-     * Kamera gleda ispred robota (45°).
-     * Koristi Soft-Start.
-     */
-    void postaviUVozaPoziciju();
+    void parkiraj();
 };
 
 #endif // MANIPULATOR_H

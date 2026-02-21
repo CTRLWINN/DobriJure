@@ -8,7 +8,7 @@
 float IMPULSA_PO_CM = 40;
 float IMPULSA_PO_STUPNJU = 5.3;
 int BAZNA_BRZINA = 200;
-int MIN_BRZINA = 80;
+int MIN_BRZINA = 100; // Povecano jer desni motor ne radi dobro ispod 100
 float Kp_Enc = 2.0; // Pojacanje P-regulatora za sinkronizaciju
 
 void voziRavno(float cm, int speed) {
@@ -17,6 +17,7 @@ void voziRavno(float cm, int speed) {
     resetirajEnkodere();
     resetirajGyro(); // Reset Gyro za pravocrtnu voznju (Target = 0)
     
+    // Smjernica 2: Mjerenje udaljenosti (Max Encoder Logic)
     long cilj = abs(cm * IMPULSA_PO_CM);
     int smjer = (cm > 0) ? 1 : -1;
     
@@ -24,19 +25,19 @@ void voziRavno(float cm, int speed) {
     long rampThreshold = cilj * 0.2; // Zadnjih 20%
     if (rampThreshold > (15 * IMPULSA_PO_CM)) rampThreshold = 15 * IMPULSA_PO_CM; // Max 15cm usporavanja
     
-    int maxBrzina = (speed > 0) ? speed : BAZNA_BRZINA; // Use passed speed or default
+    int maxBrzina = (speed > 0) ? speed : BAZNA_BRZINA; 
 
     unsigned long pocetak = millis();
     unsigned long zadnjiPomak = millis();
     long zadnjaPozicija = 0;
-    
-    // Timeout...
     unsigned long timeout = 10000; 
 
     while (true) {
         long encL = abs(dohvatiLijeviEnkoder());
         long encR = abs(dohvatiDesniEnkoder());
-        long trenutniPut = (encL + encR) / 2;
+        
+        // Smjernica 2: Koristimo MAX vrijednost enkodera za prekid
+        long trenutniPut = max(encL, encR); 
         long preostalo = cilj - trenutniPut;
 
         // 1. Provjera kraja
@@ -62,30 +63,25 @@ void voziRavno(float cm, int speed) {
             trenutnaBrzina = map(preostalo, 0, rampThreshold, MIN_BRZINA, maxBrzina);
         }
 
-        // 3. Sinkronizacija (GYRO P-Regulator)
+        // 3. Smjernica 1: Održavanje pravca isključivo preko IMU-a
         // Target kut je 0.
+        // Ako robot skrene LIJEVO -> kut je NEGATIVAN (npr -5).
+        // Zelimo skrenuti DESNO da se vratimo na 0.
+        // Desno skretanje = Lijevi motor BRZE, Desni SPORIJE.
+        
         float currentAngle = dohvatiKutGyro();
-        // Korekcija: Ako idemo u minus (desno), zelimo ici lijevo (+) -> Pojacati L, smanjiti D?
-        // Ne, ako idemo desno (negativni kut), zelimo skrenuti lijevo.
-        // Lijevi kotac sporije, Desni brze? NE -> To skrece desno jos vise.
-        // Lijevi kotac BRZE, Desni SPORIJE -> Skrece lijevo.
+        float Kp_Gyro_Drive = 5.0; 
+
+        // Ako je currentAngle = -5 (Lijevo) -> korekcija = -25.
+        // Zelimo motL povecati -> motL = speed - korekcija (speed - (-25) = speed + 25)
+        // Zelimo motR smanjiti -> motR = speed + korekcija (speed + (-25) = speed - 25)
         
-        // Testiramo obrnutu logiku od prosli put (koja je skrenula ostro lijevo).
-        
-        float Kp_Gyro_Drive = 5.0; // Smanjeno pojacanje
-        // float gyroError = 0 - currentAngle; 
-        // int korekcija = gyroError * Kp_Gyro_Drive;
-        
-        // Jednostavnije: 
-        // korekcija > 0 znaci skreni lijevo?
         int korekcija = currentAngle * Kp_Gyro_Drive; 
 
-        // Ako je kut pozitivan (Lijevo), korekcija je pozitivna.
-        // Zelimo skrenuti desno -> Lijevi sporije (-), Desni brze (+).
-        
         int motL = trenutnaBrzina - korekcija;
         int motR = trenutnaBrzina + korekcija;
         
+        // Limitiranje PWM signala
         motL = constrain(motL, 0, 255);
         motR = constrain(motR, 0, 255);
         
@@ -105,10 +101,14 @@ void voziRavno(float cm, int speed) {
         posaljiTelemetriju();
     }
     
-    // 5. Aktivno kocenje
+    // Smjernica 3: Uklanjanje poravnavanja (No End-of-Move Equalization)
+    // Odmah kocimo bez ikakve dodatne logike enkodera
     motori_koci();
-    delay(1000); // Drzi kocnicu 500ms (Povecano radi inercije)
-    stani();    // Oslobodi motor (Coast / High Z)
+    delay(500); // Kratko kocenje
+    stani();    // Oslobodi motor
+
+    // Smjernica 4: Telemetrijska potvrda
+    Serial.println("TELEMETRIJA: Zavrsena komanda voziRavno");
 }
 
 // Ostatak funkcija (prazne ili implementirane kasnije)

@@ -27,7 +27,13 @@ void setup() {
     
     // Osiguraj da robot stoji
     stani();
+    kalibrirajGyro();
+    resetirajGyro();
+    resetirajMag();
     
+    // Postavi manipulator u parking poziciju
+    ruka.parkiraj();
+
     // Smanji timeout za Serial2 da readString ne blokira dugo u petljama
     Serial2.setTimeout(5);
     
@@ -46,6 +52,31 @@ void loop() {
             Serial.print("CMD: ");
             Serial.println(msg);
 
+            // --- MANUALNE KOMANDE (Tekstualni format) ---
+            if (msg.startsWith("SERVO:")) {
+                int commaIdx = msg.indexOf(',');
+                if (commaIdx != -1) {
+                    int ch = msg.substring(6, commaIdx).toInt();
+                    float val = msg.substring(commaIdx + 1).toFloat();
+                    
+                    // Mapiranje Dashboard kanala 5 (Hvat) na robot kanal 4
+                    if (ch == 5) ch = 4; 
+                    
+                    ruka.postaviKut(ch, val);
+                    Serial2.println("{\"status\": \"OK\"}");
+                }
+                return;
+            }
+            
+            if (msg.startsWith("LOAD_PRESET:")) {
+                int idx = msg.substring(12).toInt();
+                if (idx == 0) ruka.parkiraj();
+                // Ostali preseti se mogu dodati ovdje
+                Serial2.println("{\"status\": \"OK\"}");
+                return;
+            }
+
+            // --- JSON KOMANDE ---
             DeserializationError error = deserializeJson(doc, msg);
 
             if (!error) {
@@ -82,33 +113,18 @@ void loop() {
                 }
                 else if (strcmp(cmd, "arm") == 0) {
                      const char* val = doc["val"];
-                     int idx = -1;
-                     // Trazi preset po imenu
-                     for(int i=0; i<15; i++) {
-                         if (presetNames[i] && strcmp(presetNames[i], val) == 0) {
-                             idx = i;
-                             break;
-                         }
-                     }
                      
-                     if (idx != -1) {
-                         ruka.primjeniPreset(idx);
+                     if (strcmp(val, "PARKING") == 0 || strcmp(val, "Parkiraj") == 0 || strcmp(val, "HOME") == 0) {
+                         ruka.parkiraj();
                          Serial2.println("{\"status\": \"OK\"}");
                      } else {
-                         // Fallback: Mozda je poslan broj kao string?
-                         idx = atoi(val);
-                         if (idx >= 0 && idx < 15) {
-                             ruka.primjeniPreset(idx);
-                             Serial2.println("{\"status\": \"OK\"}");
-                         } else {
-                             Serial.println("Unknown Preset");
-                             Serial2.println("{\"status\": \"ERR\"}");
-                         }
+                         Serial.println("Preset not defined in new system yet.");
+                         Serial2.println("{\"status\": \"ERR_NOT_IMPL\"}");
                      }
                 }
                 else if (strcmp(cmd, "set_motor") == 0) {
                     float val = doc["val"];
-                    postaviKonfigKretanja(val); // Old function, kept for compatibility if needed
+                    postaviKonfigKretanja(val); 
                     Serial2.println("{\"status\": \"OK\"}");
                 }
                 else if (strcmp(cmd, "set_move_cfg") == 0) {
@@ -161,7 +177,7 @@ void posaljiTelemetriju() {
         extern float IMPULSA_PO_CM; 
         float cm = (encL + encR) / 2.0 / IMPULSA_PO_CM; 
         
-        int armIdx = ruka.dohvatiCiljaniPreset();
+        int armIdx = 0; // ruka.dohvatiCiljaniPreset(); - TODO: Implementirati
         
         long usF = ocitajPrednjiUZ();
         long usB = ocitajStraznjiUZ();

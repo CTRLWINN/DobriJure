@@ -44,13 +44,13 @@ void motori_stani() {
 }
 
 void motori_koci() {
-    // Lijevi
-    digitalWrite(PIN_MOTOR_L_IN1, LOW);
-    digitalWrite(PIN_MOTOR_L_IN2, LOW);
-    analogWrite(PIN_MOTOR_L_PWM, 255); // Full enable for braking
+    // Lijevi - Short Brake (HIGH, HIGH)
+    digitalWrite(PIN_MOTOR_L_IN1, HIGH);
+    digitalWrite(PIN_MOTOR_L_IN2, HIGH);
+    analogWrite(PIN_MOTOR_L_PWM, 255); // PWM nebitan kod Short Brake na nekim driverima, ali MAX je sigurno
     
-    // Desni
-    digitalWrite(PIN_MOTOR_R_IN1, LOW);
-    digitalWrite(PIN_MOTOR_R_IN2, LOW);
-    analogWrite(PIN_MOTOR_R_PWM, 255); // Full enable for braking
+    // Desni - Short Brake (HIGH, HIGH)
+    digitalWrite(PIN_MOTOR_R_IN1, HIGH);
+    digitalWrite(PIN_MOTOR_R_IN2, HIGH);
+    analogWrite(PIN_MOTOR_R_PWM, 255); 
 }
