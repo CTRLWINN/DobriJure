@@ -91,3 +91,29 @@ Dashboard prelazi u asinkroni mod ("Thread"). Čita jednu po jednu liniju iz tek
 ## Zaključak
 
 Moderna industrija zahtijeva repetitivnost. Razdvajanje softverskog sučelja na **fazu učenja (Teach-in i Eksport)** i **fazu izvršavanja (Import i Auto mode)** odgovara stvarnom principu rada industrijskih robota (Siemens, KUKA, ABB). Vježbom putem ovog Dashboarda u biti simulirate ulogu modernog inženjera robotike u pravoj tvornici! Sretno programiranje!
+
+---
+
+## 5. Prevođenje u C++ kod (Alternativa za Bluetooth)
+
+Moguće je da će suci na natjecanju zabraniti korištenje Bluetooth (BLE) komunikacije tijekom ocjenske vožnje radi pravednosti i sprječavanja vanjskog upravljanja. Zbog toga naš sustav posjeduje Python skriptu **`generator_cpp.py`**, koja cijelu vašu naučenu misiju prevodi u izvorni C++ kod spreman za prijenos (upload) na mikrokontroler.
+
+### Uloga glavne Arduino petlje i "State Machine" pristup
+Kada izvezete `misija.txt` iz Dashboarda, taj dokument sadrži popis naredbi (poput `VOZI`, `SKRENI`). Da bi robot ovakve naredbe izvodio uzročno-posljedično, većina početnika koristila bi funkciju `delay()`. Međutim, takav pristup zamrzava program, ostavljajući robota "slijepim" na promjene senzora tijekom izvođenja radnje.
+
+Skripta `generator_cpp.py` analizira `misija.txt` i stvara cjeloviti **C++ State Machine (Konačni automat)** program koji se izvodi unutar glavne Arduino petlje (`void loop()`). 
+* Uključena je napredna upotreba **brze izvršne petlje**: petlja se vrti tisućama puta u sekundi.
+* Kada dođemo do nekog koraka, robot samo zada parametre brzine i zabilježi vrijeme, a petlja **nije blokirana i ide dalje**. Osvježavanje senzora se nesmetano nastavlja.
+* Rješavanje logičkih skokova (`AKO JE TOČNO`, `INAČE`, `KRAJ BLOKA`) automatski se ugrađuje u kod preskakanjem odgovarajućih C++ `case`-ova unutar `switch` bloka.
+
+Ovakvo *korištenje neblokirajuće petlje* je najbitnije rješenje za postizanje potpune autonomije bez zastoja u glavnoj Arduino petlji.
+
+### Postupak prevođenja i prijenosa
+1. Kroz Dashboard i Teach-in metodu napravite cijelu misiju i kliknite **EKSPORTIRAJ**. Imenujte datoteku kao `misija.txt` i spremite je.
+2. Kopirajte tu datoteku u istu mapu gdje se nalazi i naša skripta `generator_cpp.py` (mapa `Dashboard`).
+3. Pokrenite **`generator_cpp.py`** skriptu (npr. iz terminala: `python generator_cpp.py`).
+4. Skripta će prevesti misiju i automatski stvoriti novu mapu pod nazivom **`RobotStaza`**.
+5. U njoj generira potpunu datoteku pod imenom `RobotStaza.ino`. Pokrenite je dvoklikom, čime se otvara Arduino IDE.
+6. Spojite robota izravno USB kabelom na računalo i pritisnite tipku **Upload**. To je sad 100% C++ kod!
+
+Završni rezultat je autonomni robot koji ima trajno "zapečenu" rutinu u svojoj memoriji, otporan je na gubitak signala i udovoljava natjecateljskim propozicijama. Početak generirane misije trigerirat će se vašim fizičkim pritiskom na glavnu hardversku tipku na tijelu robota (spojenoj na Start pin D2).
