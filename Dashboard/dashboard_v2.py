@@ -553,7 +553,12 @@ class DashboardApp(ctk.CTk):
             ("VOZI (L/D)", "move_dual"),
             ("OKRENI (Spot)", "turn"),
             ("SKRENI (Pivot)", "pivot"),
-            ("RUKA", "arm")
+            ("RUKA", "arm"),
+            ("PROVJERI SENZOR", "check_sensor"),
+            ("AKO JE TOČNO", "if_true"),
+            ("INAČE", "if_false"),
+            ("KRAJ BLOKA", "end_if"),
+            ("KALIBRIRAJ IMU", "cal_imu")
         ]
         
         for lbl, cmd in funcs:
@@ -695,7 +700,12 @@ class DashboardApp(ctk.CTk):
             "pivot": "SKRENI (Pivot)",
             "arm": "RUKA",
             "wait": "ČEKAJ",
-            "stop": "STANI"
+            "stop": "STANI",
+            "check_sensor": "PROVJERI SENZOR",
+            "if_true": "AKO JE TOČNO",
+            "if_false": "INAČE",
+            "end_if": "KRAJ BLOKA",
+            "cal_imu": "KALIBRIRAJ IMU"
         }
         
     def load_inspector(self, cmd_type, data=None):
@@ -729,6 +739,16 @@ class DashboardApp(ctk.CTk):
             self.combo_arm.pack(fill="x", padx=10, pady=5)
             if data and "val" in data: self.combo_arm.set(data["val"])
             self.entry_params["val"] = self.combo_arm
+        elif cmd_type == "check_sensor":
+            ctk.CTkLabel(self.inspector_content, text="Tip senzora:").pack(anchor="w", padx=10)
+            self.combo_sens = ctk.CTkOptionMenu(self.inspector_content, values=["induktivni"])
+            self.combo_sens.pack(fill="x", padx=10, pady=5)
+            if data and "type" in data: self.combo_sens.set(data["type"])
+            self.entry_params["type"] = self.combo_sens
+        elif cmd_type in ["if_true", "if_false", "end_if"]:
+            ctk.CTkLabel(self.inspector_content, text="Kontrolni blok (nema parametara)", text_color="gray").pack(pady=10)
+        elif cmd_type == "cal_imu":
+            ctk.CTkLabel(self.inspector_content, text="Kalibracija žiroskopa (cca 2 sekunde)", text_color="orange").pack(pady=10)
 
         btn_text = "SPREMI PROMJENE" if self.editing_index is not None else "IZVRŠI I DODAJ"
         btn_cmd = self.save_edit if self.editing_index is not None else self.execute_and_add
@@ -998,64 +1018,73 @@ class DashboardApp(ctk.CTk):
         self.lbl_auto_status.configure(text="STATUS: STOPPED", text_color="red")
 
     def run_mission_thread(self):
-        self.lbl_auto_status.configure(text="STATUS: RUNNING", text_color="green")
         lines = self.log_box.get("1.0", "end").splitlines()
-        
-        for i, line in enumerate(lines):
-            if not self.mission_running: break
+        mission = []
+        for line in lines:
             line = line.strip()
-            if not line or line.startswith("---") or line.startswith("#"): continue
-            
-            self.lbl_auto_status.configure(text=f"Exec: {line}")
-            
-            # 1. Parse Command
-            payload = None
+            if not line or line.startswith("#"): continue
             try:
-                # Try JSON first (New Interface)
-                payload = json.loads(line)
-            except:
-                # Fallback to Old Text Format (CMD:VAL)
-                parts = line.split(":")
-                if len(parts) >= 2:
-                    if parts[0] == "MOVE": payload = {"cmd": "straight", "val": float(parts[1])}
-                    elif parts[0] == "ARM": payload = {"cmd": "arm", "val": parts[1]}
-                    elif parts[0] == "WAIT": payload = {"cmd": "wait", "val": int(parts[1])}
+                mission.append(json.loads(line))
+            except: pass
+
+        last_condition_met = True
+        i = 0
+        while i < len(mission):
+            if not self.mission_running: break
+            step = mission[i]
+            cmd_type = step.get("cmd")
             
-            if not payload: 
-                print(f"Skipping invalid line: {line}")
+            self.lbl_auto_status.configure(text=f"Izvršavam: {cmd_type}")
+
+            if cmd_type == "check_sensor":
+                resp = self.robot.send_command_and_wait(json.dumps(step))
+                last_condition_met = (resp and resp.get("status") == "1")
+                i += 1
+                continue
+            
+            if cmd_type == "if_true":
+                if not last_condition_met:
+                    # Preskoči do if_false ili end_if
+                    while i < len(mission) - 1:
+                        i += 1
+                        next_cmd = mission[i].get("cmd")
+                        if next_cmd == "if_false" or next_cmd == "end_if":
+                            break
+                    continue
+                i += 1
                 continue
 
-            cmd_type = payload.get("cmd")
+            if cmd_type == "if_false":
+                if last_condition_met:
+                    # Preskoči kompletan else blok jer je if bio točan
+                    while i < len(mission) - 1:
+                        i += 1
+                        if mission[i].get("cmd") == "end_if":
+                            break
+                    continue
+                i += 1
+                continue
             
-            # 2. Execute & Wait
+            if cmd_type == "end_if":
+                i += 1
+                continue
+
+            # Standardne komande kretanja i ruke
             if cmd_type == "wait":
-                ms = int(payload.get("val", 0))
+                ms = int(step.get("val", 0))
                 time.sleep(ms / 1000.0)
-                continue
-
-            # Send Command & Wait for Completion (Sync Mode)
-            # straight, turn, pivot, move_dual -> firmware BLOCKS until done, then sends JSON.
-            
-            json_payload = json.dumps(payload)
-            
-            if cmd_type in ["straight", "turn", "pivot", "move_dual"]:
-                # Wait for "DONE" or "OK"
-                resp = self.robot.send_command_and_wait(json_payload, timeout=20.0)
-                if not resp:
-                    print(f"Command {cmd_type} timed out!")
-                # Move to next step immediately after response
-                
+            elif cmd_type in ["straight", "turn", "pivot", "move_dual", "cal_imu"]:
+                self.robot.send_command_and_wait(json.dumps(step), timeout=20.0)
             elif cmd_type == "arm":
-                self.robot.send_command(json_payload)
-                # Wait fixed time for arm physical movement (firmware is non-blocking)
+                self.robot.send_command(json.dumps(step))
                 time.sleep(2.0)
-                
             else:
-                # Other commands (e.g. stop, reset)
-                self.robot.send_command(json_payload)
+                self.robot.send_command(json.dumps(step))
+            
+            i += 1
 
         self.mission_running = False
-        self.lbl_auto_status.configure(text="STATUS: DONE", text_color="blue")
+        self.lbl_auto_status.configure(text="STATUS: GOTOVO", text_color="blue")
 
     def create_input(self, parent, label):
         f = ctk.CTkFrame(parent, fg_color="transparent")
@@ -1147,7 +1176,7 @@ class DashboardApp(ctk.CTk):
             filename = filedialog.askopenfilename(defaultextension=".txt", filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")])
             if not filename: return
             
-            with open(filename, "r", encoding="utf-8") as f:
+            with open(filename, "r", encoding="utf-8-sig") as f:
                 content = f.read()
                 self.log_box.delete("1.0", "end")
                 self.log_box.insert("end", content)

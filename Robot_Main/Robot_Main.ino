@@ -122,6 +122,15 @@ void loop() {
                          Serial2.println("{\"status\": \"ERR_NOT_IMPL\"}");
                      }
                 }
+                else if (strcmp(cmd, "read_sensor") == 0) {
+                    const char* type = doc["type"];
+                    if (strcmp(type, "induktivni") == 0) {
+                        bool res = ocitajInduktivni();
+                        Serial2.print("{\"status\": \"");
+                        Serial2.print(res ? "1" : "0");
+                        Serial2.println("\"}");
+                    }
+                }
                 else if (strcmp(cmd, "set_motor") == 0) {
                     float val = doc["val"];
                     postaviKonfigKretanja(val); 
