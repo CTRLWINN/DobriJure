@@ -48,6 +48,7 @@ private:
     StanjeRuke trenutnoStanje;
     String tipSekvence; 
     unsigned long zadnjeVrijeme;
+    int zadnjiPresetIdx; // -1 ako je manualno pomaknut
 
     int kutU_Pulseve(int kanal, float kut);
     bool jesuLiMotoriStigli();
@@ -67,6 +68,10 @@ public:
     void azuriraj();
     void zapocniSekvencu(String sekvenca);
     void parkiraj();
+    void ucitajPreset(int idx);
+    
+    int dohvatiPresetIdx();
+    String dohvatiNazivPozicije();
 };
 
 #endif // MANIPULATOR_H

@@ -6,6 +6,7 @@ Manipulator::Manipulator() {
     zadnjeVrijeme = 0;
 
     // Inicijalizacija na parking poziciju
+    zadnjiPresetIdx = 0; // 0 je Parkiraj
     for (int i = 0; i < 5; i++) {
         trenutniKutovi[i] = (float)pozicijaParking[i];
         ciljaniKutovi[i] = (float)pozicijaParking[i];
@@ -35,6 +36,7 @@ void Manipulator::postaviPoziciju(const int poz[5]) {
 void Manipulator::postaviKut(int kanal, float stupnjevi) {
     if (kanal < 0 || kanal >= 5) return;
     ciljaniKutovi[kanal] = stupnjevi;
+    zadnjiPresetIdx = -1; // Manualna promjena
     // Za pojedinačni kut koristimo default brzinu
     brzine[kanal] = (stupnjevi > trenutniKutovi[kanal]) ? KORAK_MK : -KORAK_MK;
 }
@@ -55,8 +57,32 @@ bool Manipulator::jesuLiMotoriStigli() {
 }
 
 void Manipulator::parkiraj() {
-    postaviPoziciju(pozicijaParking);
-    trenutnoStanje = STANJE_PARKIRANJE;
+    ucitajPreset(0);
+}
+
+void Manipulator::ucitajPreset(int idx) {
+    if (idx < 0 || idx >= 15) return;
+    zadnjiPresetIdx = idx;
+    
+    // Konverzija float kutova iz configa u int za postaviPoziciju
+    int kuteviInt[5];
+    for(int i=0; i<5; i++) {
+        kuteviInt[i] = (int)config.presets[idx].angles[i];
+    }
+    postaviPoziciju(kuteviInt);
+    trenutnoStanje = STANJE_PARKIRANJE; // Možemo ostaviti ovo stanje
+}
+
+int Manipulator::dohvatiPresetIdx() {
+    return zadnjiPresetIdx;
+}
+
+String Manipulator::dohvatiNazivPozicije() {
+    if (zadnjiPresetIdx == -1) return "Manual";
+    if (zadnjiPresetIdx >= 0 && zadnjiPresetIdx < 15) {
+        return String(presetNames[zadnjiPresetIdx]);
+    }
+    return "Nepoznato";
 }
 
 void Manipulator::zapocniSekvencu(String sekvenca) {

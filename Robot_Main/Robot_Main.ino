@@ -4,6 +4,8 @@
 #include "Enkoderi.h"
 #include "IMU.h"
 #include "Manipulator.h"
+#include "Vision.h"
+#include "Display.h"
 #include <ArduinoJson.h>
 
 /*
@@ -34,6 +36,8 @@ void setup() {
     // Postavi manipulator u parking poziciju
     ruka.parkiraj();
 
+    inicijalizirajDisplay();
+
     // Smanji timeout za Serial2 da readString ne blokira dugo u petljama
     Serial2.setTimeout(5);
     
@@ -43,6 +47,18 @@ void setup() {
 void loop() {
     ruka.azuriraj();
     azurirajIMU();
+    azurirajVision();
+
+    // Ažuriranje OLED ekrana (svakih 200ms da ne gušimo procesor)
+    static unsigned long zadnjeAzuriranjeDisplaya = 0;
+    if (millis() - zadnjeAzuriranjeDisplaya > 200) {
+        zadnjeAzuriranjeDisplaya = millis();
+        azurirajDisplay(
+            dohvatiZadnjiQR(),
+            ruka.dohvatiNazivPozicije(),
+            ocitajInduktivni()
+        );
+    }
 
     if (Serial2.available()) {
         String msg = Serial2.readStringUntil('\n');
@@ -70,8 +86,7 @@ void loop() {
             
             if (msg.startsWith("LOAD_PRESET:")) {
                 int idx = msg.substring(12).toInt();
-                if (idx == 0) ruka.parkiraj();
-                // Ostali preseti se mogu dodati ovdje
+                ruka.ucitajPreset(idx);
                 Serial2.println("{\"status\": \"OK\"}");
                 return;
             }
@@ -186,7 +201,7 @@ void posaljiTelemetriju() {
         extern float IMPULSA_PO_CM; 
         float cm = (encL + encR) / 2.0 / IMPULSA_PO_CM; 
         
-        int armIdx = 0; // ruka.dohvatiCiljaniPreset(); - TODO: Implementirati
+        int armIdx = ruka.dohvatiPresetIdx(); 
         
         long usF = ocitajPrednjiUZ();
         long usB = ocitajStraznjiUZ();
