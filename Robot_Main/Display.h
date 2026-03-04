@@ -20,7 +20,13 @@ void inicijalizirajDisplay();
  * @param qr Zadnji pročitani QR kod
  * @param pozicija Naziv trenutne pozicije manipulatora
  * @param metal True ako je detektiran metal
+ * @param tof Udaljenost izmjerena TOF senzorom
  */
-void azurirajDisplay(String qr, String pozicija, bool metal);
+void azurirajDisplay(String qr, String pozicija, bool metal, long tof);
+
+/**
+ * Prikazuje veliki centrirani tekst preko cijelog ekrana.
+ */
+void prikaziVelikiTekst(String tekst);
 
 #endif // DISPLAY_H

@@ -28,6 +28,16 @@ String dohvatiZadnjiQR();
 float dohvatiVisionError();
 
 /**
+ * Vraća udaljenost izmjerenu TOF senzorom u milimetrima.
+ */
+long dohvatiVisionUdaljenost();
+
+/**
+ * Vraća IP adresu Nicle na wifiju
+ */
+String dohvatiVisionIP();
+
+/**
  * Briše zadnji pročitani QR kod (npr. nakon obrade).
  */
 void obrisiZadnjiQR();

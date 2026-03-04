@@ -24,14 +24,14 @@ const char* presetNames[] = {
 void inicijalizirajHardware() {
     // --- Inicijalizacija Serijskih Portova ---
     Serial.begin(115200);  // Debug
-    Serial2.begin(9600);   // Bluetooth (Standardni baudrate za HC-05/06 je često 9600, prilagoditi po potrebi)
-    Serial3.begin(115200); // Vision (Nicla Vision obično radi na višem baudrateu)
+    Serial2.begin(9600);   // Bluetooth (Mora biti tvorničkih 9600 inače dobivamo \x10\x10 smeće)
+    Serial3.begin(9600);   // Vision (Nicla Vision PA9/PA10 usklađeno s njenim UART 9)
     
     Serial.println("Inicijalizacija hardvera...");
 
     // --- I2C ---
     Wire.begin();
-    Wire.setClock(400000); // 400kHz Fast Mode
+    Wire.setClock(100000); // Smanjeno na 100kHz (Standard Mode) umjesto 400kHz radi stabilnosti OLED-a
 
     // --- Inicijalizacija Manipulatora (PWM Driver) ---
     pwm.begin();

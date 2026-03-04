@@ -33,10 +33,28 @@ void setup() {
     resetirajGyro();
     resetirajMag();
     
-    // Postavi manipulator u parking poziciju
-    ruka.parkiraj();
-
+    // Inicijaliziraj display prije svega
     inicijalizirajDisplay();
+    
+    // --- STARTUP SEKVENCA ---
+    // 1. Polako u parking i prikaz na ekranu (ceka 5 sekundi)
+    prikaziVelikiTekst("PARKING");
+    ruka.postaviPoziciju(pozicijaParking);
+    unsigned long t = millis();
+    while (millis() - t < 5000) {
+        ruka.azuriraj();
+        delay(20);
+    }
+    
+    // 2. Odlazak u SAFE poziciju i prikaz na ekranu (ceka 3 sekunde)
+    prikaziVelikiTekst("SAFE");
+    ruka.postaviPoziciju(pozicijaSafe);
+    t = millis();
+    while (millis() - t < 3000) {
+        ruka.azuriraj();
+        delay(20);
+    }
+    // Nakon ovog normalni loop nastupa s ispisom šala.
 
     // Smanji timeout za Serial2 da readString ne blokira dugo u petljama
     Serial2.setTimeout(5);
@@ -56,7 +74,8 @@ void loop() {
         azurirajDisplay(
             dohvatiZadnjiQR(),
             ruka.dohvatiNazivPozicije(),
-            ocitajInduktivni()
+            ocitajInduktivni(),
+            dohvatiVisionUdaljenost()
         );
     }
 
@@ -133,8 +152,21 @@ void loop() {
                          ruka.parkiraj();
                          Serial2.println("{\"status\": \"OK\"}");
                      } else {
-                         Serial.println("Preset not defined in new system yet.");
-                         Serial2.println("{\"status\": \"ERR_NOT_IMPL\"}");
+                         int pronadjenIdx = -1;
+                         for (int i = 0; i < 15; i++) {
+                             if (strcmp(val, presetNames[i]) == 0) {
+                                 pronadjenIdx = i;
+                                 break;
+                             }
+                         }
+                         
+                         if (pronadjenIdx != -1) {
+                             ruka.ucitajPreset(pronadjenIdx);
+                             Serial2.println("{\"status\": \"OK\"}");
+                         } else {
+                             Serial.println("Preset not defined in new system yet.");
+                             Serial2.println("{\"status\": \"ERR_NOT_IMPL\"}");
+                         }
                      }
                 }
                 else if (strcmp(cmd, "read_sensor") == 0) {
@@ -212,8 +244,10 @@ void posaljiTelemetriju() {
         
         float yaw = dohvatiYaw(); 
         float gyro = dohvatiKutGyro();
+        long tof = dohvatiVisionUdaljenost();
+        String ip = dohvatiVisionIP();
         
-        // Format: STATUS:cm,pL,pR,armIdx,usF,usB,usL,usR,ind,yaw,gyro
+        // Format: STATUS:cm,pL,pR,armIdx,usF,usB,usL,usR,ind,yaw,gyro,tof,ip
         Serial2.print("STATUS:");
         Serial2.print(cm, 1); Serial2.print(",");
         Serial2.print(encL); Serial2.print(",");
@@ -225,6 +259,8 @@ void posaljiTelemetriju() {
         Serial2.print(usR); Serial2.print(",");
         Serial2.print(ind ? "1" : "0"); Serial2.print(",");
         Serial2.print(yaw, 1); Serial2.print(",");
-        Serial2.println(gyro, 1);
+        Serial2.print(gyro, 1); Serial2.print(",");
+        Serial2.print(tof); Serial2.print(",");
+        Serial2.println(ip);
     }
 }

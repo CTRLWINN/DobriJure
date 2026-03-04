@@ -104,7 +104,9 @@ class RobotController:
                                     "usF": parts[4], "usB": parts[5], "usL": parts[6], "usR": parts[7],
                                     "ind": parts[8],
                                     "yaw": parts[9] if len(parts) > 9 else "0",
-                                    "gyro": parts[10] if len(parts) > 10 else "0"
+                                    "gyro": parts[10] if len(parts) > 10 else "0",
+                                    "tof": parts[11] if len(parts) > 11 else "0",
+                                    "ip": parts[12] if len(parts) > 12 else "0.0.0.0"
                                 }
                                 if self.on_telemetry_callback:
                                     self.on_telemetry_callback(data_dict)
@@ -263,8 +265,11 @@ class DashboardApp(ctk.CTk):
         # IP Address Input
         ctk.CTkLabel(self.sidebar, text="Nicla Vision IP:", font=ctk.CTkFont(size=12, weight="bold")).grid(row=2, column=0, padx=20, pady=(10, 0))
         self.entry_ip = ctk.CTkEntry(self.sidebar)
-        self.entry_ip.grid(row=3, column=0, padx=20, pady=(0, 20))
+        self.entry_ip.grid(row=3, column=0, padx=20, pady=(0, 5))
         self.entry_ip.insert(0, DEFAULT_IP)
+        
+        self.btn_update_ip = ctk.CTkButton(self.sidebar, text="Potvrdi IP", command=self.update_nicla_ip)
+        self.btn_update_ip.grid(row=4, column=0, padx=20, pady=(0, 20))
         
         # Tabs
         self.tabview = ctk.CTkTabview(self)
@@ -291,6 +296,11 @@ class DashboardApp(ctk.CTk):
 
         # Key bindings for Manual Drive
         self.bind("<KeyPress>", self.on_key_press)
+
+    def update_nicla_ip(self):
+        new_ip = self.entry_ip.get().strip()
+        self.wifi_checker.ip = new_ip
+        messagebox.showinfo("IP Adresa", f"Nicla IP uspješno postavljen na:\n{new_ip}\nStatus povezivosti pratitelj ažurira svake dvije sekunde.")
 
     def start_async_loop(self):
         asyncio.set_event_loop(self.loop)
@@ -346,6 +356,12 @@ class DashboardApp(ctk.CTk):
         self.lbl_wifi_led.pack(side="left", padx=2)
         self.lbl_wifi_text = ctk.CTkLabel(self.wifi_status_frame, text=f"WiFi Disconnected ({DEFAULT_IP})")
         self.lbl_wifi_text.pack(side="left", padx=2)
+        
+        self.lbl_tof = ctk.CTkLabel(self.wifi_status_frame, text="TOF: - mm", text_color="cyan", font=("Arial", 14, "bold"))
+        self.lbl_tof.pack(side="left", padx=15)
+
+        self.lbl_nicla_ip = ctk.CTkLabel(self.wifi_status_frame, text="IP: -", text_color="yellow", font=("Arial", 14, "bold"))
+        self.lbl_nicla_ip.pack(side="left", padx=15)
 
         # Video Stream 
         self.video_viewer = MJPEGViewer(col2, "", width=320, height=240, fg_color="black")
@@ -379,7 +395,7 @@ class DashboardApp(ctk.CTk):
             
         ctk.CTkButton(col2, text="Pošalji Boje (SET)", command=self.send_color).pack(pady=5)
 
-    def create_servo_control(self, parent, idx, name, max_angle=180):
+    def create_servo_control(self, parent, idx, name, max_angle=180, default_val=90):
         f = ctk.CTkFrame(parent)
         f.pack(fill="x", padx=5, pady=2)
         
@@ -389,8 +405,8 @@ class DashboardApp(ctk.CTk):
         entry.pack(side="right", padx=2)
         
         slider = ctk.CTkSlider(f, from_=0, to=max_angle, number_of_steps=max_angle)
-        slider.set(90)
-        entry.insert(0, "90")
+        slider.set(default_val)
+        entry.insert(0, str(default_val))
         slider.pack(side="left", fill="x", expand=True, padx=5)
         
         # Callbacks
@@ -655,14 +671,15 @@ class DashboardApp(ctk.CTk):
         # Slideri
         self.sliders = []
         self.servo_entries = []
-        servo_names = ["Baza", "Rame", "Lakat", "Zglob", "Rot", "Hvat"]
+        servo_names = ["Baza", "Rame", "Lakat", "Zglob", "Hvat"]
+        default_angles = [135, 150, 40, 100, 90]
         
         self.frame_sliders = ctk.CTkScrollableFrame(self.frame_manip, height=150)
         self.frame_sliders.pack(fill="both", expand=True, padx=2)
 
-        for i in range(6):
+        for i in range(5):
             max_angle = 360 if i == 0 else 180
-            self.create_servo_control(self.frame_sliders, i, servo_names[i], max_angle)
+            self.create_servo_control(self.frame_sliders, i, servo_names[i], max_angle, default_angles[i])
 
         # Content Inspector (Gornji dio)
         self.inspector_content = ctk.CTkFrame(self.frame_inspector, fg_color="transparent")
@@ -733,9 +750,7 @@ class DashboardApp(ctk.CTk):
             ctk.CTkLabel(self.inspector_content, text="Poz = Desno, Neg = Lijevo", font=("Arial", 10)).pack()
         elif cmd_type == "arm":
             ctk.CTkLabel(self.inspector_content, text="Pozicija Ruke:").pack(anchor="w", padx=10)
-            self.combo_arm = ctk.CTkOptionMenu(self.inspector_content, values=[
-                "BOCA", "KROV_1", "ODLAGANJE_D1", "ODLAGANJE_D2", "ODLAGANJE_D3", "HOME", "DIZANJE_SIGURNO"
-            ])
+            self.combo_arm = ctk.CTkOptionMenu(self.inspector_content, values=self.preset_names)
             self.combo_arm.pack(fill="x", padx=10, pady=5)
             if data and "val" in data: self.combo_arm.set(data["val"])
             self.entry_params["val"] = self.combo_arm
@@ -889,6 +904,10 @@ class DashboardApp(ctk.CTk):
             self.lbl_arm.configure(text=f"Arm: {d['arm']}")
             self.lbl_gyro.configure(text=f"Gyro: {d['gyro']}°")
             self.lbl_mag.configure(text=f"Mag: {d['yaw']}°")
+            if hasattr(self, 'lbl_tof') and 'tof' in d:
+                self.lbl_tof.configure(text=f"TOF: {d['tof']} mm")
+            if hasattr(self, 'lbl_nicla_ip') and 'ip' in d and d['ip'] != "0.0.0.0":
+                self.lbl_nicla_ip.configure(text=f"Nicla: {d['ip']}")
             
             self.lbl_enc.configure(text=f"Enc: L={d['pL']} R={d['pR']}")
             self.lbl_us_fb.configure(text=f"F: {d['usF']} | B: {d['usB']}")

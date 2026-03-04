@@ -13,8 +13,10 @@
 #include "HardwareMap.h"
 
 // --- KONFIGURACIJA I KONSTANTE ---
-#define SERVO_MIN 500            // Min PWM puls (500us)
-#define SERVO_MAX 2500           // Max PWM puls (2500us)
+#define REV_SERVO_MIN 500        // Min PWM puls (REV Smart Servo)
+#define REV_SERVO_MAX 2500       // Max PWM puls (REV Smart Servo)
+#define SG90_SERVO_MIN 600       // Min PWM puls (9g SG90 Servo)
+#define SG90_SERVO_MAX 2400      // Max PWM puls (9g SG90 Servo)
 #define KORAK_MK 1.5             // Brzina kretanja (stupnjeva po koraku)
 
 // Kanali prema RukaTest.ino
@@ -24,19 +26,40 @@
 #define CH_ZGLOB     3
 #define CH_HVATALJKA 4
 
-// Pozicije
-const int pozicijaParking[5] = {135, 145, 25, 90, 90};
+// Pozicije (Glavne)
+const int pozicijaParking[5] = {135, 150, 40, 100, 90};
+const int pozicijaSafe[5]     = {135, 110, 80, 60, 90};
+
+// Placeholder pozicije za testne sekvence (Korisnik će ažurirati kasnije)
+const int pozicijaQrKod[5]        = {135, 90, 90, 90, 90};
+const int pozicijaVoznja[5]       = {135, 90, 90, 90, 90};
+const int pozicijaTrazimObjekt[5] = {135, 90, 90, 90, 90};
+const int pozicijaHvatanje[5]     = {135, 90, 90, 90, 90};
+const int pozicijaSpremi[5]       = {135, 90, 90, 90, 90};
 
 // Stanja za State Machine (Hrvatski)
 enum StanjeRuke {
     STANJE_MIRUJE,
     STANJE_PARKIRANJE,
+    STANJE_IDUCI_U_SAFE_PRIJE_PARKING,
+    STANJE_IDUCI_U_SAFE_IZ_PARKING,
     // Sekvencijalna stanja za orkestraciju
     STANJE_SEK_PRIPREMA,  // Odlazak na poziciju iznad
     STANJE_SEK_SPUSTANJE, 
     STANJE_SEK_HVATANJE, 
     STANJE_SEK_DIZANJE,   
-    STANJE_SEK_SPREMANJE  
+    STANJE_SEK_SPREMANJE,
+
+    // Testne sekvence kretanja
+    STANJE_TEST_START_CEKANJE,
+    STANJE_TEST_START_SAFE,
+    
+    STANJE_TEST_QR_KOD,
+
+    STANJE_TEST_NAKON_QR_VOZNJA,
+
+    STANJE_TEST_HVATANJE_SPUSTANJE,
+    STANJE_TEST_HVATANJE_SPREMANJE
 };
 
 class Manipulator {
@@ -49,6 +72,7 @@ private:
     String tipSekvence; 
     unsigned long zadnjeVrijeme;
     int zadnjiPresetIdx; // -1 ako je manualno pomaknut
+    int odgodeniCiljevi[5]; // Cuva ciljnu poziciju dok ruka ide u SAFE
 
     int kutU_Pulseve(int kanal, float kut);
     bool jesuLiMotoriStigli();
@@ -69,6 +93,7 @@ public:
     void zapocniSekvencu(String sekvenca);
     void parkiraj();
     void ucitajPreset(int idx);
+    void pokreniTestSekvencu(int broj);
     
     int dohvatiPresetIdx();
     String dohvatiNazivPozicije();

@@ -6,9 +6,9 @@ import sensor, image, time, pyb, network, usocket, sys
 from pyb import UART, LED
 
 # --- Wi-Fi Konfiguracija ---
-SSID = "********" // upisati WiFi SSID
-KEY  = "********" // upisati password
-HOST = '' 
+SSID = "Robotika" # upisati WiFi SSID
+KEY  = "1L0v3R0b0ts!" # upisati password
+HOST = ''
 PORT = 8080
 
 # --- Konfiguracija ---
@@ -41,6 +41,15 @@ led_red = LED(1)
 led_green = LED(2)
 led_blue = LED(3)
 
+import machine
+try:
+    from vl53l1x import VL53L1X
+    i2c = machine.I2C(2)
+    tof = VL53L1X(i2c)
+except Exception as e:
+    print("TOF Init Error:", e)
+    tof = None
+
 # Treptaj za start
 led_red.on()
 time.sleep_ms(200) # Cekaj 200 milisekundi, ne sekundi!
@@ -53,11 +62,11 @@ sensor.skip_frames(time = 2000)   # Čekaj da se senzor stabilizira
 sensor.set_auto_gain(False)       # Isključi za stabilnu detekciju boje
 sensor.set_auto_whitebal(False)   # Isključi za stabilnu detekciju boje
 
-# UART 3 na Nicla Vision se koristi za komunikaciju prema van (TX=P3, RX=P4 na headeru?)
-# Provjeriti mapiranje. Nicla Vision obično koristi UART(4) ili UART(1) ovisno o FW.
-# Prema pinoutu, koristimo UART sa 115200.
-uart = UART(4, UART_BAUDRATE) # UART 4 je često na standardnim pinovima
-uart.init(115200, bits=8, parity=None, stop=1)
+# UART 9 na Nicla Vision se koristi za komunikaciju prema van (TX=PA9, RX=PA10)
+# Prema pinoutu, koristimo UART sa 9600.
+UART_BAUDRATE = 9600
+uart = UART(9, UART_BAUDRATE) 
+uart.init(9600, bits=8, parity=None, stop=1)
 
 clock = time.clock()
 
@@ -70,7 +79,7 @@ while not wlan.isconnected():
     try:
         print(f"Connecting to {SSID}...")
         wlan.connect(SSID, KEY)
-        
+
         # Wait for connection (timeout 10s locally)
         start = time.time()
         while not wlan.isconnected():
@@ -78,10 +87,10 @@ while not wlan.isconnected():
             if time.time() - start > 10:
                 print("Connection timeout.")
                 break
-        
+
         if wlan.isconnected():
             break
-            
+
         print("Retrying in 2 seconds...")
         time.sleep(2)
     except Exception as e:
@@ -133,7 +142,7 @@ def send_uart(tag, data):
 while(True):
     clock.tick()
     img = sensor.snapshot()
-    
+
     # --- 0. Provjera UART poruka (Konfiguracija) ---
     if uart.any():
         line = uart.readline()
@@ -147,9 +156,9 @@ while(True):
                     if len(parts) == 7:
                         tip = parts[0] # BOCA, LIMENKA, SPUZVA
                         vals = (int(parts[1]), int(parts[2]), int(parts[3]), int(parts[4]), int(parts[5]), int(parts[6]))
-                        
+
                         print("Updating " + tip + " to: " + str(vals))
-                        
+
                         # Ažuriraj listu
                         new_thresholds = []
                         updated = False
@@ -159,7 +168,7 @@ while(True):
                                 updated = True
                             else:
                                 new_thresholds.append((thresh, label, color))
-                        
+
                         if updated:
                             THRESHOLDS = new_thresholds
                             # Trepni plavo za potvrdu
@@ -182,24 +191,24 @@ while(True):
             time.sleep_ms(500)
     else:
         led_green.off()
-        
+
     # 2. Detekcija Objekata (Colors)
     # Trazimo sve boje definriane u THRESHOLDS
-    
+
     current_best_blob = None
     detected_type = None
-    
+
     for thresh, label, color in THRESHOLDS:
         blobs = img.find_blobs([thresh], pixels_threshold=200, area_threshold=200, merge=True)
         if blobs:
             # Nadji najveci blob ove boje
             largest = max(blobs, key=lambda b: b.pixels())
-            
-            # Provjeri je li ovo najveci objekt generalno u ovom frameu? 
+
+            # Provjeri je li ovo najveci objekt generalno u ovom frameu?
             # (Jednostavna logika: prikazujemo sve, ali saljemo najveci)
             img.draw_rectangle(largest.rect(), color=color)
             img.draw_string(largest.x(), largest.y() - 10, label, color=color)
-            
+
             if current_best_blob is None or largest.pixels() > current_best_blob.pixels():
                 current_best_blob = largest
                 detected_type = label
@@ -207,17 +216,24 @@ while(True):
     # Salji podatke o najvecem detektiranom objektu
     if current_best_blob:
         img.draw_cross(current_best_blob.cx(), current_best_blob.cy())
-        
+
         # Format: OBJ:TIP,x,y,povrsina
         # Centar ekrana je cca 160, 120 (za QVGA 320x240)
         # Saljemo odstupanje od centra za PID? Ili apsolutne koordinate?
         # Saljemo tip i X koordinatu za rotaciju robota.
-        
+
         data = "{},{},{}".format(detected_type, current_best_blob.cx(), current_best_blob.pixels())
         send_uart("OBJ", data)
-        
+
+    if tof:
+        try:
+            dist = tof.read()
+            send_uart("TOF", str(dist))
+        except:
+            pass
+
     # Debounce / Throttle
-    time.sleep_ms(50) 
+    time.sleep_ms(50)
 
     # --- 3. MJPEG Stream ---
     if s:
@@ -226,11 +242,11 @@ while(True):
             try:
                 client_socket, addr = s.accept()
                 print("Client connected:", addr)
-                client_socket.settimeout(3.0) 
+                client_socket.settimeout(3.0)
                 send_mjpeg_header(client_socket)
             except OSError:
                 pass # Nema novih
-        
+
         # 2. Salji frame ako imamo klijenta
         if client_socket:
             if not send_mjpeg_frame(client_socket, img):
