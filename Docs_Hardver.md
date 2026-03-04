@@ -28,10 +28,11 @@ Dva dodatna IR senzora na prednjim bumperima.
 *   **Desni:** Pin 49
 *   **Svrha:** Sprječavanje izlaska sa staze (sigurnosni override).
 
-### C. Smart Gripper (Hvataljka)
+### C. Smart Gripper (Hvataljka) i Korisničko Ulazno Sučelje
 Hvataljka je opremljena senzorima za detekciju predmeta.
-*   **Induktivni Senzor:** Pin 4 (Detektira metal/limenke).
+*   **Induktivni Senzor:** Pin 23 (Detektira metal/limenke).
 *   **Nicla Vision TOF:** Integrirani senzor udaljenosti na kameri. **Neophodan** za detekciju predmeta u hvataljci (< 5cm preciznost).
+*   **START Gumb:** Pin 4 (Za početak autonomne vožnje i izlazak iz PARKING stanja).
 
 ### D. IMU (Inercijska Mjerna Jedinica)
 **LSM9DS1** senzor spojen putem I2C sabirnice.

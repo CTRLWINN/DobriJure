@@ -116,4 +116,4 @@ Ovakvo *korištenje neblokirajuće petlje* je najbitnije rješenje za postizanje
 5. U njoj generira potpunu datoteku pod imenom `RobotStaza.ino`. Pokrenite je dvoklikom, čime se otvara Arduino IDE.
 6. Spojite robota izravno USB kabelom na računalo i pritisnite tipku **Upload**. To je sad 100% C++ kod!
 
-Završni rezultat je autonomni robot koji ima trajno "zapečenu" rutinu u svojoj memoriji, otporan je na gubitak signala i udovoljava natjecateljskim propozicijama. Početak generirane misije trigerirat će se vašim fizičkim pritiskom na glavnu hardversku tipku na tijelu robota (spojenoj na Start pin D2).
+Završni rezultat je autonomni robot koji ima trajno "zapečenu" rutinu u svojoj memoriji, otporan je na gubitak signala i udovoljava natjecateljskim propozicijama. Početak generirane misije trigerirat će se vašim fizičkim pritiskom na glavnu hardversku tipku na tijelu robota (spojenoj na Start pin 4). Uz to, na Dashboardu sada postoji indikator induktivnog senzora koji će prijaviti i zazeleniti se u status "LIMENKA" kada robot naiđe na metal, olakšavajući provjeru ispravnosti senzora prije kreiranja misija.

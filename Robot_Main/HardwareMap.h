@@ -60,7 +60,9 @@
 #define PIN_ULTRAZVUK_GRIPPER_ECHO 39
 
 // --- OSTALO ---
-#define PIN_INDUCTIVE_SENS 4 // Digital Input (Induktivni)
+#define PIN_INDUCTIVE_SENS 23 // Digital Input (Induktivni)
+#define PIN_START_BTN      4  // Pritisak za početak akcije
+
 #define PIN_SERVO_GRIP     44
 #define PIN_SERVO_LIFT     45
 
@@ -126,5 +128,6 @@ long ocitajStraznjiUZ();
 long ocitajLijeviUZ();
 long ocitajDesniUZ();
 bool ocitajInduktivni(); // True = metal detect (LOW signal usually)
+bool isStartPressed();   // Uvjet pokretanja robota
 
 #endif // HARDWAREMAP_H

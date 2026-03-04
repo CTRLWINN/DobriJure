@@ -626,6 +626,12 @@ class DashboardApp(ctk.CTk):
         self.lbl_us_lr = ctk.CTkLabel(r4, text="L: - | R: -", font=("Consolas", 11))
         self.lbl_us_lr.pack()
 
+        # Row 5: Induktivni senzor
+        r5 = ctk.CTkFrame(self.frame_telemetry)
+        r5.pack(fill="x", pady=2)
+        self.lbl_ind = ctk.CTkLabel(r5, text="Senzor: Čisto", font=("Consolas", 13, "bold"), text_color="white")
+        self.lbl_ind.pack(pady=2)
+
         # 2. Inspector
         self.frame_inspector = ctk.CTkFrame(self.tab_manual, corner_radius=0)
         self.frame_inspector.grid(row=0, column=1, sticky="nsew", padx=2, pady=2)
@@ -912,6 +918,13 @@ class DashboardApp(ctk.CTk):
             self.lbl_enc.configure(text=f"Enc: L={d['pL']} R={d['pR']}")
             self.lbl_us_fb.configure(text=f"F: {d['usF']} | B: {d['usB']}")
             self.lbl_us_lr.configure(text=f"L: {d['usL']} | R: {d['usR']}")
+            
+            # Induktivni senzor UI update
+            if hasattr(self, 'lbl_ind') and 'ind' in d:
+                if d['ind'] == '1':
+                    self.lbl_ind.configure(text="Senzor: LIMENKA", text_color="#00FF00") # Zelena
+                else:
+                    self.lbl_ind.configure(text="Senzor: Čisto", text_color="white")
             
             # Auto Tab Updates
             if hasattr(self, 'lbl_auto_dist'):

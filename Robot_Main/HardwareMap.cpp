@@ -82,6 +82,7 @@ void inicijalizirajHardware() {
 
     // --- Ostalo ---
     pinMode(PIN_INDUCTIVE_SENS, INPUT_PULLUP); // Pretpostavka open-collector ili slično
+    pinMode(PIN_START_BTN, INPUT_PULLUP);      // Start Gumb
     // Servo pinovi ne trebaju eksplicitni pinMode ako koristimo Servo biblioteku, 
     // ali dobro ih je definirati ako se biblioteka ne koristi odmah.
     
@@ -109,4 +110,9 @@ long ocitajDesniUZ()   { return izmjeriUZ(PIN_US_RIGHT_TRIG, PIN_US_RIGHT_ECHO);
 bool ocitajInduktivni() {
     // Induktivni senzor (NPN) daje LOW kada detektira metal
     return digitalRead(PIN_INDUCTIVE_SENS) == LOW; 
+}
+
+bool isStartPressed() {
+    // Gumb s INPUT_PULLUP pinom daje LOW kada je stisnut
+    return digitalRead(PIN_START_BTN) == LOW;
 }

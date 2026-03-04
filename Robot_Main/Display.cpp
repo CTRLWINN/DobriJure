@@ -74,15 +74,23 @@ void azurirajDisplay(String qr, String pozicija, bool metal, long tof) {
     
     display.clearDisplay();
 
-    // Ispis TOF udaljenosti na vhu ekrana (zatraženo)
-    display.setTextSize(2);
-    display.setCursor(0, 0);
-    if (tof >= 0) {
-        display.print("TOF: ");
-        display.print(tof);
-        display.println(" mm");
+    if (metal) {
+        // Ako je metal detektiran, prvenstvo ima poruka LIMENKA
+        display.setTextSize(3);
+        display.setTextColor(SH110X_WHITE);
+        display.setCursor(0, 15);
+        display.println("LIMENKA");
     } else {
-        display.println("TOF: ---");
+        // Običan ispis TOF udaljenosti na vhu ekrana
+        display.setTextSize(2);
+        display.setCursor(0, 0);
+        if (tof >= 0) {
+            display.print("TOF: ");
+            display.print(tof);
+            display.println(" mm");
+        } else {
+            display.println("TOF: ---");
+        }
     }
 
     // Marvin šala ostaje kao popratni tekst ispod

@@ -46,6 +46,15 @@ void setup() {
         delay(20);
     }
     
+    // 1.5 Cekanje gumba za pocetak misije (START Button)
+    prikaziVelikiTekst("CEKANJE STARTA");
+    while(!isStartPressed()) {
+        ruka.azuriraj();
+        // azurirajDisplay se ovdje ne zove jer tekst stoji fiksan
+        delay(50);
+    }
+
+    
     // 2. Odlazak u SAFE poziciju i prikaz na ekranu (ceka 3 sekunde)
     prikaziVelikiTekst("SAFE");
     ruka.postaviPoziciju(pozicijaSafe);
