@@ -106,8 +106,15 @@ void Manipulator::ucitajPreset(int idx) {
         case 2:  cilj = pozicijaVoznja; break;
         case 3:  cilj = pozicijaPripremaQR; break;
         case 4:  cilj = pozicijaCitanjeQR; break;
-        case 5:  cilj = pozicijaPripremaPickup; break;
-        case 6:  cilj = pozicijaSafe; break; // PROVJERA_PICKUP (nije definirana)
+        case 5: 
+            // PRIPREMA_PICKUP - Okida skeniranje ako je TOF povezan
+            if (tofFnPtr != nullptr) {
+                ucitajPreset6Skeniranje(); // Pokreće scanning sweep
+                return;
+            }
+            cilj = pozicijaPripremaPickup; 
+            break;
+        case 6:  cilj = pozicijaProvjeraMetal; break; // PROVJERA_PICKUP (koristi metal poziciju za sweep zglobove)
         case 7:  cilj = pozicijaPickup; break;
         case 8:  cilj = pozicijaProvjeraMetal; break;
         case 9:  cilj = pozicijaVoznjaPickup; break;
@@ -152,15 +159,21 @@ void Manipulator::ucitajPreset(int idx) {
     postaviSve(cilj, idx);
 }
 
-void Manipulator::ucitajPreset6Skeniranje(long (*getTof)()) {
-    // Postavi ruku na PROVJERA_PICKUP poziciju pa pokreni TOF skeniranje baze
+void Manipulator::setTofFunction(long (*getTof)()) {
     tofFnPtr = getTof;
-    skenPocetniKut = (float)pozicijaProvjeraMetal[CH_BAZA]; // PROVJERA_PICKUP koristi PROVJERA_METAL poziciju za zglobove
+}
+
+void Manipulator::ucitajPreset6Skeniranje(long (*getTof)()) {
+    if (getTof != nullptr) tofFnPtr = getTof;
+    if (tofFnPtr == nullptr) return; // Ne skeniraj ako nemas funkciju
+    
+    // Postavi ruku na PRIPREMA_PICKUP poziciju pa pokreni TOF skeniranje baze
+    skenPocetniKut = (float)pozicijaProvjeraMetal[CH_BAZA]; 
     skenMinUdaljenost = 9999;
     skenMinKut = skenPocetniKut;
 
     // Postavi sve zglobove na PRIPREMA_PICKUP, bazu na pocetni kut
-    postaviSve(pozicijaPripremaPickup, 6);
+    postaviSve(pozicijaPripremaPickup, 5); 
 
     // Inicij sweep: postavi ciljanu bazu na -30 stupnjeva od pocetnog
     int tmpKutovi[5];
@@ -168,7 +181,7 @@ void Manipulator::ucitajPreset6Skeniranje(long (*getTof)()) {
     tmpKutovi[CH_BAZA] = (int)(skenPocetniKut - 30.0f);
     if (tmpKutovi[CH_BAZA] < 0) tmpKutovi[CH_BAZA] = 0;
     postaviPoziciju(tmpKutovi);
-    zadnjiPresetIdx = 6;
+    zadnjiPresetIdx = 5; 
     trenutnoStanje = STANJE_SKEN_LEVO;
     Serial.print("[SKEN] Start kut: "); Serial.print(skenPocetniKut);
     Serial.print(" -> "); Serial.println(tmpKutovi[CH_BAZA]);

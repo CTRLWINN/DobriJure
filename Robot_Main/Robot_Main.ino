@@ -35,6 +35,7 @@ void setup() {
     
     // Inicijaliziraj display prije svega
     inicijalizirajDisplay();
+    ruka.setTofFunction(dohvatiVisionUdaljenost); 
     
     // --- STARTUP SEKVENCA ---
     // 1. Polako u parking i prikaz na ekranu (ceka 5 sekundi)
@@ -139,16 +140,7 @@ void loop() {
             
             if (msg.startsWith("LOAD_PRESET:")) {
                 int idx = msg.substring(12).toInt();
-                if (idx == 6) {
-                    // PROVJERA_PICKUP: TOF skeniranje baze
-                    ruka.ucitajPreset6Skeniranje(dohvatiVisionUdaljenost);
-                } else if (idx == 4) {
-                    // CITANJE_QR: idi na poziciju, zatim zapocni cekanje QR
-                    ruka.ucitajPreset(idx);
-                    ruka.zapocniCekanjeQR();
-                } else {
-                    ruka.ucitajPreset(idx);
-                }
+                ruka.ucitajPreset(idx);
                 Serial2.println("{\"status\": \"OK\"}");
                 return;
             }
@@ -193,10 +185,6 @@ void loop() {
                      
                      if (strcmp(val, "PARKING") == 0 || strcmp(val, "Parkiraj") == 0 || strcmp(val, "HOME") == 0) {
                          ruka.parkiraj();
-                         Serial2.println("{\"status\": \"OK\"}");
-                     } else if (strcmp(val, "PROVJERA_PICKUP") == 0) {
-                         // Specijalni preset 6 s TOF skeniranjem
-                         ruka.ucitajPreset6Skeniranje(dohvatiVisionUdaljenost);
                          Serial2.println("{\"status\": \"OK\"}");
                      } else {
                          int pronadjenIdx = -1;

@@ -395,14 +395,14 @@ class DashboardApp(ctk.CTk):
             "PRIPREMA_QR": [190, 90, 60, 50, 40],
             "CITANJE_QR": [250, 80, 80, 55, 25],
             "PRIPREMA_PICKUP": [135, 80, 90, 40, 80],
-            "PROVJERA_PICKUP": [135, 90, 90, 90, 90],
+            "PROVJERA_PICKUP": [185, 105, 50, 70, 145],
             "PICKUP": [135, 65, 130, 70, 145],
             "PROVJERA_METAL": [185, 105, 50, 70, 145],
             "VOZNJA_PICKUP": [130, 150, 55, 20, 145],
-            "OSTAVLJANJE_PRIPREMA": [135, 90, 90, 90, 90],
-            "OSTAVLJANJE_D1": [135, 90, 90, 90, 90],
-            "OSTAVLJANJE_D2": [135, 90, 90, 90, 90],
-            "OSTAVLJANJE_D3": [135, 90, 90, 90, 90],
+            "OSTAVLJANJE_PRIPREMA": [135, 100, 90, 40, 145],
+            "OSTAVLJANJE_D1": [190, 80, 110, 60, 40],
+            "OSTAVLJANJE_D2": [135, 80, 110, 60, 40],
+            "OSTAVLJANJE_D3": [80, 90, 90, 90, 90],
             "PROVJERA_OSTAVLJANJE": [135, 90, 90, 90, 90],
             "SAFE_PICKUP": [135, 110, 80, 60, 145]
         }
@@ -829,10 +829,9 @@ class DashboardApp(ctk.CTk):
                 elif "3" in val or "QR" in val: payload["mod"] = "q"
                 
             if self.current_cmd_type == "arm" and "val" in payload:
-                # Automatski prebaci 'arm' u 'arm_pos' (čisti kutevi u misiju!)
-                preset = payload["val"]
-                if preset in self.preset_angles:
-                    payload = {"cmd": "arm_pos", "angles": self.preset_angles[preset], "preset_name": preset}
+                # Zadržavamo 'arm' komandu s nazivom preseta kako bi Arduino mogao pokrenuti
+                # specijalnu logiku (skeniranje, sekvencijalni drop itd.)
+                pass
             
             if self.current_cmd_type == "arm_pos" and "a0" in payload:
                 angles = [int(payload["a0"]), int(payload["a1"]), int(payload["a2"]), int(payload["a3"]), int(payload["a4"])]
@@ -983,10 +982,9 @@ class DashboardApp(ctk.CTk):
 
     def exec_record_arm(self):
         preset = self.man_preset_combo.get()
-        # 1. Execute
+        # 1. Execute using high-level command to trigger scan/sequential logic
         try:
-             idx = self.preset_names.index(preset)
-             self.robot.send_command(f"LOAD_PRESET:{idx}")
+             self.robot.send_command(json.dumps({"cmd": "arm", "val": preset}))
              # 2. Record
              self.log_mission_step(f"ARM:{preset}")
         except: pass
@@ -1250,20 +1248,17 @@ class DashboardApp(ctk.CTk):
 
     def load_preset(self):
         name = self.combo_preset.get()
+        # Šaljemo naziv komande umjesto sirovih kutova da robot može pokrenuti skeniranje/sekvence
+        payload = {"cmd": "arm", "val": name}
+        self.robot.send_command(json.dumps(payload))
+        
+        # Ažuriraj lokalne slidere automatski prema onome što Dashboard MISLI da su kutovi
         if name in self.preset_angles:
             kutevi = self.preset_angles[name]
-            # Pošalji robotu
-            payload = {"cmd": "arm_pos", "angles": kutevi}
-            self.robot.send_command(json.dumps(payload))
-            
-            # Ažuriraj lokalne slidere automatski
             for i in range(5):
                 self.sliders[i].set(kutevi[i])
                 self.servo_entries[i].delete(0, "end")
                 self.servo_entries[i].insert(0, str(kutevi[i]))
-                
-        else:
-            messagebox.showerror("Error", "Nepoznata pozicija")
 
     def on_key_press(self, event):
         if self.tabview.get() != "Učenje (Manual)": return

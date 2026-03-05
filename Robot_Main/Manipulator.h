@@ -137,8 +137,9 @@ public:
     int dohvatiPresetIdx();
     String dohvatiNazivPozicije();
 
-    // --- TOF Skeniranje PROVJERA_PICKUP ---
-    void ucitajPreset6Skeniranje(long (*getTof)());
+    // --- TOF Skeniranje PRIPREMA_PICKUP ---
+    void setTofFunction(long (*getTof)());
+    void ucitajPreset6Skeniranje(long (*getTof)() = nullptr); // Može primiti novi ili koristiti postojeći
 
     // --- QR Cekanje i Wiggle ---
     void zapocniCekanjeQR();
