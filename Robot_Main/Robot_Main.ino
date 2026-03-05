@@ -47,10 +47,10 @@ void setup() {
     }
     
     // 1.5 Cekanje gumba za pocetak misije (START Button)
-    prikaziVelikiTekst("CEKANJE STARTA");
     while(!isStartPressed()) {
         ruka.azuriraj();
-        // azurirajDisplay se ovdje ne zove jer tekst stoji fiksan
+        azurirajVision(); // azuriramo vision da doboijemo IP ako fali
+        azurirajDisplayCekanjeStarta(dohvatiVisionIP());
         delay(50);
     }
 
@@ -76,6 +76,14 @@ void loop() {
     ruka.azuriraj();
     azurirajIMU();
     azurirajVision();
+
+    // Ako je QR primljen za vrijeme cekanja, signaliziraj manipulatoru da zaustavi wiggle
+    static String zadnjiQRObradjeni = "";
+    String trenutniQR = dohvatiZadnjiQR();
+    if (trenutniQR.length() > 0 && trenutniQR != zadnjiQRObradjeni) {
+        zadnjiQRObradjeni = trenutniQR;
+        ruka.primiQRSignal(); // Zaustavi wiggle ako je bio aktivan
+    }
 
     // Ažuriranje OLED ekrana (svakih 200ms da ne gušimo procesor)
     static unsigned long zadnjeAzuriranjeDisplaya = 0;
@@ -131,7 +139,16 @@ void loop() {
             
             if (msg.startsWith("LOAD_PRESET:")) {
                 int idx = msg.substring(12).toInt();
-                ruka.ucitajPreset(idx);
+                if (idx == 6) {
+                    // PROVJERA_PICKUP: TOF skeniranje baze
+                    ruka.ucitajPreset6Skeniranje(dohvatiVisionUdaljenost);
+                } else if (idx == 4) {
+                    // CITANJE_QR: idi na poziciju, zatim zapocni cekanje QR
+                    ruka.ucitajPreset(idx);
+                    ruka.zapocniCekanjeQR();
+                } else {
+                    ruka.ucitajPreset(idx);
+                }
                 Serial2.println("{\"status\": \"OK\"}");
                 return;
             }
@@ -263,6 +280,8 @@ void loop() {
                     while (!isStartPressed()) {
                         posaljiTelemetriju();
                         ruka.azuriraj();
+                        azurirajVision();
+                        azurirajDisplayCekanjeStarta(dohvatiVisionIP());
                         delay(50);
                     }
                     Serial2.println("{\"status\": \"DONE\"}");

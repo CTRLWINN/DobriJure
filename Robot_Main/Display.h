@@ -29,4 +29,10 @@ void azurirajDisplay(String qr, String pozicija, bool metal, long tof, char kame
  */
 void prikaziVelikiTekst(String tekst);
 
+/**
+ * Prikazuje IP adresu kamere dok se ceka pocetak misije.
+ * @param ip zadnja pročitana IP adresa Nicla Vision kamere
+ */
+void azurirajDisplayCekanjeStarta(String ip);
+
 #endif // DISPLAY_H

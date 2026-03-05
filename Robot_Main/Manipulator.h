@@ -70,7 +70,19 @@ enum StanjeRuke {
     STANJE_TEST_NAKON_QR_VOZNJA,
 
     STANJE_TEST_HVATANJE_SPUSTANJE,
-    STANJE_TEST_HVATANJE_SPREMANJE
+    STANJE_TEST_HVATANJE_SPREMANJE,
+    STANJE_SAFE_PICKUP_K1,
+    STANJE_SAFE_PICKUP_K2,
+
+    // TOF Skeniranje za PROVJERA_PICKUP
+    STANJE_SKEN_LEVO,      // Sweepuje bazu od start -> start-30°, biljezi min TOF
+    STANJE_SKEN_DESNO,     // Sweepuje bazu od start-30° -> start+30°, biljezi min TOF
+    STANJE_SKEN_NAMJESTI,  // Baza ide na kut s minimalnom udaljenoscu
+
+    // QR Cekanje i Wiggle
+    STANJE_QR_CEKANJE,     // Ceka QR signal 3s
+    STANJE_QR_WIGGLE_LR,   // Wiggle baze u lijevo
+    STANJE_QR_WIGGLE_RL    // Wiggle baze u desno
 };
 
 class Manipulator {
@@ -84,6 +96,17 @@ private:
     unsigned long zadnjeVrijeme;
     int zadnjiPresetIdx; // -1 ako je manualno pomaknut
     int odgodeniCiljevi[5]; // Cuva ciljnu poziciju dok ruka ide u SAFE
+
+    // TOF Skeniranje
+    float skenPocetniKut;         // Kut baze pri pocetku skeniranja
+    float skenMinKut;             // Kut na kojem je bila min udaljenost
+    long  skenMinUdaljenost;      // Minimalna izmjerena udaljenost
+    long  (*tofFnPtr)();          // Function pointer na getter za TOF udaljenost
+
+    // QR Wiggle
+    unsigned long qrCekanjeStart; // Kad je zapocelo cekanje QR-a
+    float qrPocetnaKutBaze;       // Kut baze kada je pocelo cekanje
+    bool  qrPrimljeno;            // Signal je li QR primljen
 
     int kutU_Pulseve(int kanal, float kut);
     bool jesuLiMotoriStigli();
@@ -109,6 +132,13 @@ public:
     
     int dohvatiPresetIdx();
     String dohvatiNazivPozicije();
+
+    // --- TOF Skeniranje PROVJERA_PICKUP ---
+    void ucitajPreset6Skeniranje(long (*getTof)());
+
+    // --- QR Cekanje i Wiggle ---
+    void zapocniCekanjeQR();
+    void primiQRSignal();
 };
 
 #endif // MANIPULATOR_H

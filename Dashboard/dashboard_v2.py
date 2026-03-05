@@ -1328,6 +1328,9 @@ class DashboardApp(ctk.CTk):
             messagebox.showerror("Error", f"Could not load: {e}")
 
     def _send_parking_and_status(self, parking_cmd):
+        # Najprije pošalji stop da prekinemo eventualni wait_start blokrajući loop na Arduinu
+        self.robot.send_command(json.dumps({"cmd": "stop"}))
+        import time; time.sleep(0.2)  # Mali razmak da robot obradi stop
         self.robot.send_command(parking_cmd)
         self.lbl_auto_status.configure(text="✅ Ruka u PARKING - pritisni POKRENI MISIJU.", text_color="orange")
         print("Arm → PARKING (čeka START)")

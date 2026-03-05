@@ -4,6 +4,13 @@ Manipulator::Manipulator() {
     trenutnoStanje = STANJE_MIRUJE;
     tipSekvence = "";
     zadnjeVrijeme = 0;
+    tofFnPtr = nullptr;
+    skenPocetniKut = 135.0;
+    skenMinKut = 135.0;
+    skenMinUdaljenost = 9999;
+    qrCekanjeStart = 0;
+    qrPocetnaKutBaze = 135.0;
+    qrPrimljeno = false;
 
     // Inicijalizacija na parking poziciju
     zadnjiPresetIdx = 0; // 0 je Parkiraj
@@ -109,14 +116,73 @@ void Manipulator::ucitajPreset(int idx) {
         case 12: cilj = pozicijaOstavljanjeD2; break;
         case 13: cilj = pozicijaOstavljanjeD3; break;
         case 14: cilj = pozicijaProvjeraOstavljanje; break;
-        case 15: cilj = pozicijaSafePickup; break;
+        case 15: 
+            // Inicira sekvencirani dolazak (Rame+Zglob pa onda Lakat)
+            // Stoga ne postavljamo odmah 'cilj' preko postaviSve()
+            zadnjiPresetIdx = 15;
+            
+            // Postavi Rame (CH_RAME=1) i Zglob (CH_ZGLOB=3) na cilj
+            int tmpKutovi[5];
+            for (int i=0; i<5; i++) tmpKutovi[i] = (int)trenutniKutovi[i]; // Drži gdje jesi
+            tmpKutovi[CH_RAME] = pozicijaSafePickup[CH_RAME];
+            tmpKutovi[CH_ZGLOB] = pozicijaSafePickup[CH_ZGLOB];
+            postaviPoziciju(tmpKutovi); // Generira brzine kretanja
+            
+            trenutnoStanje = STANJE_SAFE_PICKUP_K1;
+            return; // Prekida switch i ne zove postaviSve
         default: cilj = pozicijaSafe; break;
     }
 
     postaviSve(cilj, idx);
 }
 
+void Manipulator::ucitajPreset6Skeniranje(long (*getTof)()) {
+    // Postavi ruku na PROVJERA_PICKUP poziciju pa pokreni TOF skeniranje baze
+    tofFnPtr = getTof;
+    skenPocetniKut = (float)pozicijaProvjeraMetal[CH_BAZA]; // PROVJERA_PICKUP koristi PROVJERA_METAL poziciju za zglobove
+    skenMinUdaljenost = 9999;
+    skenMinKut = skenPocetniKut;
+
+    // Postavi sve zglobove na PRIPREMA_PICKUP, bazu na pocetni kut
+    postaviSve(pozicijaPripremaPickup, 6);
+
+    // Inicij sweep: postavi ciljanu bazu na -30 stupnjeva od pocetnog
+    int tmpKutovi[5];
+    for (int i=0; i<5; i++) tmpKutovi[i] = pozicijaPripremaPickup[i];
+    tmpKutovi[CH_BAZA] = (int)(skenPocetniKut - 30.0f);
+    if (tmpKutovi[CH_BAZA] < 0) tmpKutovi[CH_BAZA] = 0;
+    postaviPoziciju(tmpKutovi);
+    zadnjiPresetIdx = 6;
+    trenutnoStanje = STANJE_SKEN_LEVO;
+    Serial.print("[SKEN] Start kut: "); Serial.print(skenPocetniKut);
+    Serial.print(" -> "); Serial.println(tmpKutovi[CH_BAZA]);
+}
+
+void Manipulator::zapocniCekanjeQR() {
+    qrCekanjeStart = millis();
+    qrPocetnaKutBaze = trenutniKutovi[CH_BAZA];
+    qrPrimljeno = false;
+    trenutnoStanje = STANJE_QR_CEKANJE;
+    Serial.println("[QR] Zapocinje cekanje QR-a (3s)...");
+}
+
+void Manipulator::primiQRSignal() {
+    if (trenutnoStanje == STANJE_QR_CEKANJE ||
+        trenutnoStanje == STANJE_QR_WIGGLE_LR ||
+        trenutnoStanje == STANJE_QR_WIGGLE_RL) {
+        qrPrimljeno = true;
+        // Vrati bazu na originalnu poziciju
+        int tmpKutovi[5];
+        for (int i=0; i<5; i++) tmpKutovi[i] = (int)trenutniKutovi[i];
+        tmpKutovi[CH_BAZA] = (int)qrPocetnaKutBaze;
+        postaviPoziciju(tmpKutovi);
+        trenutnoStanje = STANJE_MIRUJE;
+        Serial.println("[QR] Signal primljen - wiggle zaustavljen.");
+    }
+}
+
 int Manipulator::dohvatiPresetIdx() {
+
     return zadnjiPresetIdx;
 }
 
@@ -254,6 +320,114 @@ void Manipulator::azuriraj() {
             if (!kretanjeAct) {
                 postaviPoziciju(pozicijaSpremi);
                 trenutnoStanje = STANJE_MIRUJE;
+            }
+            break;
+
+        case STANJE_SAFE_PICKUP_K1:
+            // Rame i zglob su stigli, sad LAKAT
+            if (!kretanjeAct) {
+                // Dodaj emo lakat i bazu i hvataljku (Baza i hvataljka obično idu na slično, ali za svaki slucaj stavljamo cijeli preset cilja)
+                postaviPoziciju(pozicijaSafePickup);
+                trenutnoStanje = STANJE_SAFE_PICKUP_K2;
+            }
+            break;
+
+        case STANJE_SAFE_PICKUP_K2:
+            if (!kretanjeAct) {
+                trenutnoStanje = STANJE_MIRUJE; // Zavrsili
+            }
+            break;
+
+        // --- TOF SKENIRANJE ZA PROVJERA_PICKUP ---
+        case STANJE_SKEN_LEVO:
+            // Uzorkuj TOF na svakom koraku
+            if (tofFnPtr) {
+                long tofVal = tofFnPtr();
+                if (tofVal > 0 && tofVal < skenMinUdaljenost) {
+                    skenMinUdaljenost = tofVal;
+                    skenMinKut = trenutniKutovi[CH_BAZA];
+                }
+            }
+            if (!kretanjeAct) {
+                // Stigli u -30°, sad krenemo desno do +30° od pocetnog kuta
+                int tmpKutevi[5];
+                for (int i=0; i<5; i++) tmpKutevi[i] = (int)trenutniKutovi[i];
+                tmpKutevi[CH_BAZA] = (int)(skenPocetniKut + 30.0f);
+                if (tmpKutevi[CH_BAZA] > 270) tmpKutevi[CH_BAZA] = 270;
+                postaviPoziciju(tmpKutevi);
+                trenutnoStanje = STANJE_SKEN_DESNO;
+            }
+            break;
+
+        case STANJE_SKEN_DESNO:
+            // Uzorkuj TOF na svakom koraku
+            if (tofFnPtr) {
+                long tofVal = tofFnPtr();
+                if (tofVal > 0 && tofVal < skenMinUdaljenost) {
+                    skenMinUdaljenost = tofVal;
+                    skenMinKut = trenutniKutovi[CH_BAZA];
+                }
+            }
+            if (!kretanjeAct) {
+                // Stigli u +30°, sad namjesti bazu na optimalni kut
+                int tmpKutevi[5];
+                for (int i=0; i<5; i++) tmpKutevi[i] = (int)trenutniKutovi[i];
+                tmpKutevi[CH_BAZA] = (int)skenMinKut;
+                Serial.print("[SKEN] Optimalni kut: "); Serial.print(skenMinKut);
+                Serial.print(" ud: "); Serial.println(skenMinUdaljenost);
+                postaviPoziciju(tmpKutevi);
+                trenutnoStanje = STANJE_SKEN_NAMJESTI;
+            }
+            break;
+
+        case STANJE_SKEN_NAMJESTI:
+            if (!kretanjeAct) {
+                trenutnoStanje = STANJE_MIRUJE; // Skeniranje gotovo
+            }
+            break;
+
+        // --- QR CEKANJE I WIGGLE ---
+        case STANJE_QR_CEKANJE:
+            if (qrPrimljeno) {
+                trenutnoStanje = STANJE_MIRUJE;
+                break;
+            }
+            if (millis() - qrCekanjeStart > 3000) {
+                // 3 sekunde prosle, pocni wiggle
+                int tmpKutevi[5];
+                for (int i=0; i<5; i++) tmpKutevi[i] = (int)trenutniKutovi[i];
+                tmpKutevi[CH_BAZA] = (int)(qrPocetnaKutBaze - 2.0f);
+                for (int i=0; i<5; i++) brzine[i] = 0.0;
+                brzine[CH_BAZA] = 0.5; // Polako!
+                postaviPoziciju(tmpKutevi);
+                trenutnoStanje = STANJE_QR_WIGGLE_LR;
+            }
+            break;
+
+        case STANJE_QR_WIGGLE_LR:
+            if (qrPrimljeno) { trenutnoStanje = STANJE_MIRUJE; break; }
+            if (!kretanjeAct) {
+                // Stiglo u lijevu poziciju, idi desno
+                int tmpKutevi[5];
+                for (int i=0; i<5; i++) tmpKutevi[i] = (int)trenutniKutovi[i];
+                tmpKutevi[CH_BAZA] = (int)(qrPocetnaKutBaze + 2.0f);
+                postaviPoziciju(tmpKutevi);
+                // Prekoraci osiguravaju spori korak
+                brzine[CH_BAZA] = 0.5;
+                trenutnoStanje = STANJE_QR_WIGGLE_RL;
+            }
+            break;
+
+        case STANJE_QR_WIGGLE_RL:
+            if (qrPrimljeno) { trenutnoStanje = STANJE_MIRUJE; break; }
+            if (!kretanjeAct) {
+                // Stiglo u desnu poziciju, idi lijevo opet
+                int tmpKutevi[5];
+                for (int i=0; i<5; i++) tmpKutevi[i] = (int)trenutniKutovi[i];
+                tmpKutevi[CH_BAZA] = (int)(qrPocetnaKutBaze - 2.0f);
+                postaviPoziciju(tmpKutevi);
+                brzine[CH_BAZA] = 0.5;
+                trenutnoStanje = STANJE_QR_WIGGLE_LR;
             }
             break;
 

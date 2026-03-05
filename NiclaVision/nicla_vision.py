@@ -29,7 +29,7 @@ try:
 except Exception as e:
     print("Wide FOV flag not supported directly, using default FOV.")
 
-sensor.set_framesize(sensor.QVGA) # 320x240 (skalirano sa punog iznosa)
+sensor.set_framesize(sensor.QVGA) # 320x240 (VGA (640x480) uzrokuje Frame buffer overflow jer izlazimo iz RAM-a)
 
 # Rotacija 180 stupnjeva jer je kamera naopako
 sensor.set_hmirror(True)
@@ -58,19 +58,16 @@ wlan.active(True)
 
 if not wlan.isconnected():
     wlan.connect(SSID, KEY)
+    # Nećemo blokirati ovdje zauvijek! 
+    # Sustav će pokušavati u pozadini preko wlan.connect() 
     start = time.time()
-    while not wlan.isconnected():
+    while not wlan.isconnected() and time.time() - start < 5:
         time.sleep_ms(500)
         print("Spajam...")
-        if time.time() - start > 10:
-            print("Timeout kod WiFi spajanja!")
-            break
 
 if wlan.isconnected():
     ip_address = wlan.ifconfig()[0]
     print("WiFi Spojen! IP Adresa:", ip_address)
-    # Pošalji IP Arduinu da zna gdje je web stream
-    uart.write("IP:{}\r\n".format(ip_address).encode())
     led_blue.on()
     time.sleep_ms(1000)
     led_blue.off()
@@ -130,6 +127,7 @@ def nacrtaj_strelicu(img, x1, y1, x2, y2, color):
 trenutni_mod = 0 
 
 clock = time.time()
+zadnje_slanje_ip = time.time()
 
 while True:
     img = sensor.snapshot()
@@ -139,22 +137,37 @@ while True:
         komanda = uart.read(1).decode('utf-8')
         if komanda == '0':
             trenutni_mod = 0
-            # Vrati normalne boje
+            # Vrati normalne boje i rezoluciju
+            sensor.set_framesize(sensor.QVGA)
+            sensor.set_windowing((320, 240))
             sensor.set_pixformat(sensor.RGB565)
             print("Stanje: 0 (Cekanje)")
         elif komanda == 'u':
             trenutni_mod = 1
+            sensor.set_framesize(sensor.QVGA)
+            sensor.set_windowing((320, 240))
             sensor.set_pixformat(sensor.RGB565)
             print("Stanje: 1 (Mjerenje udaljenosti)")
         elif komanda == 'c':
             trenutni_mod = 2
-            # Za regresiju i robusnost svjetla, slika mora biti grayscale
+            # Za regresiju slika mora biti grayscale
+            sensor.set_framesize(sensor.QVGA)
+            sensor.set_windowing((320, 240))
             sensor.set_pixformat(sensor.GRAYSCALE)
             print("Stanje: 2 (Pracenje Ceste - GRAYSCALE Regression)")
         elif komanda == 'q':
             trenutni_mod = 3
-            sensor.set_pixformat(sensor.RGB565)
+            # Kamera ostaje u QVGA/RGB565 - ne mijenjamo rezoluciju!
             print("Stanje: 3 (QR Kod)")
+
+    # 1.5 Slanje IP/Konekcijskog statusa Arduinu svake sekunde (ako nismo u brzom modu poput voznje)
+    trenutno_vrijeme = time.time()
+    if trenutno_vrijeme - zadnje_slanje_ip > 1.0:
+        zadnje_slanje_ip = trenutno_vrijeme
+        if wlan.isconnected():
+             uart.write("IP:{}\r\n".format(wlan.ifconfig()[0]).encode())
+        else:
+             uart.write("IP:\r\n".encode()) # Šaljemo prazno (Arduino onda parsira kao "")
 
     # 2. Izvršavanje akcija ovisno o stanju
     
@@ -255,7 +268,7 @@ while True:
                 time.sleep_ms(1000)
                 led_green.off()
                 
-                # Vrati se u mod cekanja
+                # Vrati se u mod cekanja (kamera ostaje u QVGA - nema resetiranja)
                 trenutni_mod = 0
                 print("Stanje: 0 (Cekanje)")
                 

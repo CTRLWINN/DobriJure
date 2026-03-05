@@ -101,6 +101,8 @@ const char* trenutnaSadrzanaSala = "Inicijalizacija boli.";
 unsigned long alertStartTime = 0;
 const unsigned long alertDuration = 10000;
 String zadnjiPoznatiQR = "";
+unsigned long qrPrikazTimer = 0;
+bool qrAktivnoPrikazan = false;
 bool bioMetal = false;
 
 void inicijalizirajDisplay() {
@@ -128,6 +130,34 @@ void prikaziVelikiTekst(String tekst) {
     display.getTextBounds(tekst, 0, 0, &x1, &y1, &w, &h);
     display.setCursor((128 - w)/2, (64 - h)/2);
     display.println(tekst);
+    display.display();
+}
+
+void azurirajDisplayCekanjeStarta(String ip) {
+    display.clearDisplay();
+    
+    // Prikaz IP adrese na vrhu ekrana
+    display.setTextSize(1);
+    display.setTextColor(SH110X_WHITE);
+    display.setCursor(0, 0);
+    display.print("IP: ");
+    if (ip != "") {
+        display.println(ip);
+    } else {
+        display.println("no comm");
+    }
+
+    // Prikaz CEKANJE STARTA
+    String tekst = "CEKANJE STARTA";
+    display.setTextSize(2);
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.getTextBounds(tekst, 0, 0, &x1, &y1, &w, &h);
+    
+    // Centriraj niže da ne prekrije IP
+    display.setCursor((128 - w)/2, 25);
+    display.println(tekst);
+    
     display.display();
 }
 
@@ -176,23 +206,31 @@ void azurirajDisplay(String qr, String pozicija, bool metal, long tof, char kame
         }
     }
     
-    if (qr != "") {
-        // Ako postoji očitani QR kod, nacrtaj ga jasno na ekranu
+    // Detekcija novog QR koda
+    if (qr != "" && qr != zadnjiPoznatiQR) {
+        zadnjiPoznatiQR = qr;
+        qrPrikazTimer = currentMillis;
+        qrAktivnoPrikazan = true;
+    }
+    
+    // Ako je aktivan QR prikaz i nije isteklo 5 sekundi
+    if (qrAktivnoPrikazan && (currentMillis - qrPrikazTimer <= 5000)) {
         display.setTextSize(1);
         display.setCursor(0, 0);
         display.println("--- QR Ocitano ---");
         
-        // Prikazi sirovi QR kod
-        display.setCursor(0, 12);
-        display.println(qr);
-        
-        // Ispiši pametnu šalu vizualno niže da stane ekran
-        prikaziOmotanTekst(trenutnaSadrzanaSala, 0, 40, 128);
+        // Prikazi sirovi QR kod s velikim fontom ako stane, ili s pametnim wrapom
+        // Cijeli ekran je posvećen samo QR kodu
+        prikaziOmotanTekst(zadnjiPoznatiQR.c_str(), 0, 20, 128);
+        display.display();
+        return; // Preskoči ispis šala
     } else {
-        // Prikaz same šale uz pametni word-wrap sa standardnim sitnim fontom
-        // Standardni font se crta s Top-Left pristupom (za razliku od baseline) pa spuštamo na 25
-        prikaziOmotanTekst(trenutnaSadrzanaSala, 0, 25, 128);
+        qrAktivnoPrikazan = false; // Istekao timer
     }
+
+    // Prikaz same šale uz pametni word-wrap sa standardnim sitnim fontom
+    // Standardni font se crta s Top-Left pristupom (za razliku od baseline) pa spuštamo na 25
+    prikaziOmotanTekst(trenutnaSadrzanaSala, 0, 25, 128);
 
     display.display();
 }
