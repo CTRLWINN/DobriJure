@@ -182,8 +182,8 @@ void Manipulator::ucitajPreset6Skeniranje(long (*getTof)()) {
     postaviPoziciju(tmpKutovi);
     
     zadnjiPresetIdx = 6; 
-    trenutnoStanje = STANJE_SKEN_LEVO; // Koristimo LEVO za sweep 170 -> 100
-    Serial.println("[SKEN] Start 170 -> 100 (Joints: PRIPREMA_PICKUP)");
+    trenutnoStanje = STANJE_SKEN_START; // Najprije odi na 170
+    Serial.println("[SKEN] Moving to 170...");
 }
 
 void Manipulator::zapocniCekanjeQR() {
@@ -374,8 +374,16 @@ void Manipulator::azuriraj() {
             break;
 
         // --- TOF SKENIRANJE ZA PROVJERA_PICKUP ---
+        case STANJE_SKEN_START:
+            if (!kretanjeAct) {
+                // Stigli smo na 170°, sad kreni sweep na 100°
+                trenutnoStanje = STANJE_SKEN_LEVO;
+                Serial.println("[SKEN] Start sweep 170 -> 100...");
+            }
+            break;
+
         case STANJE_SKEN_LEVO:
-            // Uzorkuj TOF na svakom koraku
+            // Uzorkuj TOF na svakom koraku sweepa
             if (tofFnPtr) {
                 long tofVal = tofFnPtr();
                 if (tofVal > 0 && tofVal < skenMinUdaljenost) {
@@ -383,19 +391,22 @@ void Manipulator::azuriraj() {
                     skenMinKut = trenutniKutovi[CH_BAZA];
                 }
             }
+            
             if (!kretanjeAct) {
                 if (trenutniKutovi[CH_BAZA] > 100.1f) {
-                    // Nastavi sweep prema 100
-                    int ciljniKut = (int)trenutniKutovi[CH_BAZA] - 2; // Smanjuj po 2 stupnja
+                    // Pomakni bazu za još 2 stupnja
+                    int ciljniKut = (int)trenutniKutovi[CH_BAZA] - 2;
                     if (ciljniKut < 100) ciljniKut = 100;
                     postaviKut(CH_BAZA, (float)ciljniKut);
                 } else {
-                    // Stigli u 100°, sad namjesti bazu na optimalni kut
+                    // Sweep završen, idi na min udaljenost
                     int tmpKutevi[5];
                     for (int i=0; i<5; i++) tmpKutevi[i] = (int)trenutniKutovi[i];
                     tmpKutevi[CH_BAZA] = (int)skenMinKut;
-                    Serial.print("[SKEN] Optimalni kut: "); Serial.print(skenMinKut);
-                    Serial.print(" ud: "); Serial.println(skenMinUdaljenost);
+                    
+                    Serial.print("[SKEN] Kraj. Optimalni kut: "); Serial.print(skenMinKut);
+                    Serial.print(" dist: "); Serial.println(skenMinUdaljenost);
+                    
                     postaviPoziciju(tmpKutevi);
                     trenutnoStanje = STANJE_SKEN_NAMJESTI;
                 }

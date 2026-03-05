@@ -88,15 +88,29 @@ void loop() {
 
     // Ažuriranje OLED ekrana (svakih 200ms da ne gušimo procesor)
     static unsigned long zadnjeAzuriranjeDisplaya = 0;
+    static bool biloSkeniranje = false;
+    String poz = ruka.dohvatiNazivPozicije();
+
     if (millis() - zadnjeAzuriranjeDisplaya > 200) {
         zadnjeAzuriranjeDisplaya = millis();
         azurirajDisplay(
             dohvatiZadnjiQR(),
-            ruka.dohvatiNazivPozicije(),
+            poz,
             ocitajInduktivni(),
             dohvatiVisionUdaljenost(),
             dohvatiKameraMod()
         );
+    }
+
+    // Automatsko vraćanje kamere u IDLE nakon skeniranja
+    if (poz == "SKENIRANJE...") {
+        biloSkeniranje = true;
+    } else if (biloSkeniranje) {
+        // Upravo je završilo skeniranje
+        biloSkeniranje = false;
+        Serial3.println("0");
+        postaviKameraMod('0');
+        Serial.println("[SKEN] Automatski povratak u IDLE.");
     }
 
     if (Serial2.available()) {
@@ -141,6 +155,11 @@ void loop() {
             if (msg.startsWith("LOAD_PRESET:")) {
                 int idx = msg.substring(12).toInt();
                 ruka.ucitajPreset(idx);
+                // Ako je PROVJERA_PICKUP, prebaci kameru u TOF mode
+                if (idx == 6) {
+                    Serial3.println("u"); 
+                    postaviKameraMod('u');
+                }
                 Serial2.println("{\"status\": \"OK\"}");
                 return;
             }
@@ -197,6 +216,11 @@ void loop() {
                          
                          if (pronadjenIdx != -1) {
                              ruka.ucitajPreset(pronadjenIdx);
+                             // Ako je PROVJERA_PICKUP, prebaci kameru u TOF mode
+                             if (pronadjenIdx == 6) {
+                                 Serial3.println("u");
+                                 postaviKameraMod('u');
+                             }
                              Serial2.println("{\"status\": \"OK\"}");
                          } else {
                              Serial.println("Preset not defined in new system yet.");

@@ -75,6 +75,7 @@ enum StanjeRuke {
     STANJE_SAFE_PICKUP_K2,
 
     // TOF Skeniranje za PROVJERA_PICKUP
+    STANJE_SKEN_START,     // Baza ide na pocetnu poziciju (170°)
     STANJE_SKEN_LEVO,      // Sweepuje bazu od start -> start-30°, biljezi min TOF
     STANJE_SKEN_DESNO,     // Sweepuje bazu od start-30° -> start+30°, biljezi min TOF
     STANJE_SKEN_NAMJESTI,  // Baza ide na kut s minimalnom udaljenoscu
