@@ -172,18 +172,18 @@ void Manipulator::ucitajPreset6Skeniranje(long (*getTof)()) {
     skenMinUdaljenost = 9999;
     skenMinKut = skenPocetniKut;
 
-    // Postavi zglobove na poziciju za PROVJERA_METAL (to je visina za skeniranje)
-    postaviSve(pozicijaProvjeraMetal, 6); 
+    // Postavi zglobove na poziciju za PRIPREMA_PICKUP (to je visina za skeniranje prema uputi)
+    postaviSve(pozicijaPripremaPickup, 6); 
 
     // Inicijalna pozicija baze za pocetak skeniranja
     int tmpKutovi[5];
-    for (int i=0; i<5; i++) tmpKutovi[i] = pozicijaProvjeraMetal[i];
+    for (int i=0; i<5; i++) tmpKutovi[i] = pozicijaPripremaPickup[i];
     tmpKutovi[CH_BAZA] = (int)skenPocetniKut;
     postaviPoziciju(tmpKutovi);
     
     zadnjiPresetIdx = 6; 
     trenutnoStanje = STANJE_SKEN_LEVO; // Koristimo LEVO za sweep 170 -> 100
-    Serial.println("[SKEN] Start 170 -> 100");
+    Serial.println("[SKEN] Start 170 -> 100 (Joints: PRIPREMA_PICKUP)");
 }
 
 void Manipulator::zapocniCekanjeQR() {
