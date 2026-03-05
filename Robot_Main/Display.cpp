@@ -206,26 +206,35 @@ void azurirajDisplay(String qr, String pozicija, bool metal, long tof, char kame
         }
     }
     
-    // Detekcija novog QR koda
-    if (qr != "" && qr != zadnjiPoznatiQR) {
-        zadnjiPoznatiQR = qr;
-        qrPrikazTimer = currentMillis;
-        qrAktivnoPrikazan = true;
+    // Detekcija i prikaz QR koda
+    if (qr != "") {
+        if (qr != zadnjiPoznatiQR) {
+             zadnjiPoznatiQR = qr;
+             qrPrikazTimer = currentMillis;
+             qrAktivnoPrikazan = true;
+        } else if (kameraMod == 'q') {
+             // Ako smo u QR modu i ista je poruka, resetiraj timer da ostane na ekranu
+             qrPrikazTimer = currentMillis;
+             qrAktivnoPrikazan = true;
+        }
+    } else {
+        // Ako kamera više ne vidi ništa, "oslobodi" zadnjiPoznatiQR nakon nekog vremena
+        // ili odmah dopusti ponovno čitanje istog koda
+        zadnjiPoznatiQR = ""; 
     }
     
-    // Ako je aktivan QR prikaz i nije isteklo 5 sekundi
-    if (qrAktivnoPrikazan && (currentMillis - qrPrikazTimer <= 5000)) {
+    // Ako je aktivan QR prikaz i nije isteklo 5 sekundi (ili je kamera još u QR modu)
+    if (qrAktivnoPrikazan && (currentMillis - qrPrikazTimer <= 5000 || kameraMod == 'q')) {
         display.setTextSize(1);
         display.setCursor(0, 0);
         display.println("--- QR Ocitano ---");
         
-        // Prikazi sirovi QR kod s velikim fontom ako stane, ili s pametnim wrapom
-        // Cijeli ekran je posvećen samo QR kodu
+        // Prikazi sirovi QR kod
         prikaziOmotanTekst(zadnjiPoznatiQR.c_str(), 0, 20, 128);
         display.display();
-        return; // Preskoči ispis šala
+        return; 
     } else {
-        qrAktivnoPrikazan = false; // Istekao timer
+        qrAktivnoPrikazan = false; 
     }
 
     // Prikaz same šale uz pametni word-wrap sa standardnim sitnim fontom

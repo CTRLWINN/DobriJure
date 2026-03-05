@@ -102,15 +102,15 @@ void loop() {
         );
     }
 
-    // Automatsko vraćanje kamere u IDLE nakon skeniranja
-    if (poz == "SKENIRANJE...") {
+    // Automatsko vraćanje kamere u IDLE nakon skeniranja ili čitanja QR-a
+    if (poz == "SKENIRANJE..." || poz == "CITANJE_QR") {
         biloSkeniranje = true;
     } else if (biloSkeniranje) {
-        // Upravo je završilo skeniranje
+        // Upravo je završilo skeniranje ili čitanje
         biloSkeniranje = false;
         Serial3.println("0");
         postaviKameraMod('0');
-        Serial.println("[SKEN] Automatski povratak u IDLE.");
+        Serial.println("[VISION] Automatski povratak u IDLE.");
     }
 
     if (Serial2.available()) {
@@ -155,6 +155,12 @@ void loop() {
             if (msg.startsWith("LOAD_PRESET:")) {
                 int idx = msg.substring(12).toInt();
                 ruka.ucitajPreset(idx);
+                // Ako je CITANJE_QR, prebaci kameru u QR mode
+                if (idx == 4) {
+                    Serial3.println("q");
+                    postaviKameraMod('q');
+                    obrisiZadnjiQR();
+                }
                 // Ako je PROVJERA_PICKUP, prebaci kameru u TOF mode
                 if (idx == 6) {
                     Serial3.println("u"); 
@@ -216,6 +222,12 @@ void loop() {
                          
                          if (pronadjenIdx != -1) {
                              ruka.ucitajPreset(pronadjenIdx);
+                             // Ako je CITANJE_QR, prebaci kameru u QR mode
+                             if (pronadjenIdx == 4) {
+                                 Serial3.println("q");
+                                 postaviKameraMod('q');
+                                 obrisiZadnjiQR();
+                             }
                              // Ako je PROVJERA_PICKUP, prebaci kameru u TOF mode
                              if (pronadjenIdx == 6) {
                                  Serial3.println("u");
