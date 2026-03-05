@@ -112,9 +112,25 @@ void Manipulator::ucitajPreset(int idx) {
         case 8:  cilj = pozicijaProvjeraMetal; break;
         case 9:  cilj = pozicijaVoznjaPickup; break;
         case 10: cilj = pozicijaOstavljanjePriprema; break;
-        case 11: cilj = pozicijaOstavljanjeD1; break;
-        case 12: cilj = pozicijaOstavljanjeD2; break;
-        case 13: cilj = pozicijaOstavljanjeD3; break;
+        case 11: 
+        case 12: 
+        case 13: 
+            // Sekvencijalna dostava (Svi motori pa hvataljka na kraju)
+            if (idx == 11) cilj = pozicijaOstavljanjeD1;
+            else if (idx == 12) cilj = pozicijaOstavljanjeD2;
+            else cilj = pozicijaOstavljanjeD3;
+
+            for(int i=0; i<5; i++) odgodeniCiljevi[i] = cilj[i];
+            
+            int tmpDrop[5];
+            for(int i=0; i<4; i++) tmpDrop[i] = cilj[i]; // Baza, Rame, Lakat, Zglob na cilj
+            tmpDrop[CH_HVATALJKA] = (int)trenutniKutovi[CH_HVATALJKA]; // Hvataljka ostaje zatvorena/gdje je bila
+            
+            postaviPoziciju(tmpDrop);
+            zadnjiPresetIdx = idx;
+            trenutnoStanje = STANJE_DROP_SEK_K1;
+            return; 
+
         case 14: cilj = pozicijaProvjeraOstavljanje; break;
         case 15: 
             // Inicira sekvencirani dolazak (Rame+Zglob pa onda Lakat)
@@ -428,6 +444,20 @@ void Manipulator::azuriraj() {
                 postaviPoziciju(tmpKutevi);
                 brzine[CH_BAZA] = 0.5;
                 trenutnoStanje = STANJE_QR_WIGGLE_LR;
+            }
+            break;
+
+        case STANJE_DROP_SEK_K1:
+            if (!kretanjeAct) {
+                // Svi motori stigli, sad otvori hvataljku
+                postaviKut(CH_HVATALJKA, (float)odgodeniCiljevi[CH_HVATALJKA]);
+                trenutnoStanje = STANJE_DROP_SEK_K2;
+            }
+            break;
+
+        case STANJE_DROP_SEK_K2:
+            if (!kretanjeAct) {
+                trenutnoStanje = STANJE_MIRUJE;
             }
             break;
 

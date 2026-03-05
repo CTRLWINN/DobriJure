@@ -39,10 +39,10 @@ const int pozicijaProvjeraMetal[5]  = {185, 105, 50, 70, 145};
 const int pozicijaVoznjaPickup[5]   = {130, 150, 55, 20, 145};
 
 // Pozicije za ostavljanje (D1, D2, D3)
-const int pozicijaOstavljanjePriprema[5] = {135, 90, 90, 90, 90};
-const int pozicijaOstavljanjeD1[5]       = {135, 90, 90, 90, 90};
-const int pozicijaOstavljanjeD2[5]       = {135, 90, 90, 90, 90};
-const int pozicijaOstavljanjeD3[5]       = {135, 90, 90, 90, 90};
+const int pozicijaOstavljanjePriprema[5] = {135, 100, 90, 40, 145};
+const int pozicijaOstavljanjeD1[5]       = {190, 80, 110, 60, 40};
+const int pozicijaOstavljanjeD2[5]       = {135, 80, 110, 60, 40};
+const int pozicijaOstavljanjeD3[5]       = {80, 90, 90, 90, 90};
 const int pozicijaProvjeraOstavljanje[5] = {135, 90, 90, 90, 90};
 
 // Placeholder pozicije za ostale (Korisnik će ažurirati kasnije)
@@ -82,7 +82,11 @@ enum StanjeRuke {
     // QR Cekanje i Wiggle
     STANJE_QR_CEKANJE,     // Ceka QR signal 3s
     STANJE_QR_WIGGLE_LR,   // Wiggle baze u lijevo
-    STANJE_QR_WIGGLE_RL    // Wiggle baze u desno
+    STANJE_QR_WIGGLE_RL,   // Wiggle baze u desno
+
+    // Sekvencijalno ostavljanje (Svi motori pa hvataljka)
+    STANJE_DROP_SEK_K1,    // Pomakni sve osim hvataljke
+    STANJE_DROP_SEK_K2     // Otvori hvataljku
 };
 
 class Manipulator {
