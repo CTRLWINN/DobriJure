@@ -106,15 +106,15 @@ void Manipulator::ucitajPreset(int idx) {
         case 2:  cilj = pozicijaVoznja; break;
         case 3:  cilj = pozicijaPripremaQR; break;
         case 4:  cilj = pozicijaCitanjeQR; break;
-        case 5: 
-            // PRIPREMA_PICKUP - Okida skeniranje ako je TOF povezan
+        case 5:  cilj = pozicijaPripremaPickup; break;
+        case 6: 
+            // PROVJERA_PICKUP - Okida skeniranje ako je TOF povezan
             if (tofFnPtr != nullptr) {
                 ucitajPreset6Skeniranje(); // Pokreće scanning sweep
                 return;
             }
-            cilj = pozicijaPripremaPickup; 
+            cilj = pozicijaProvjeraMetal; 
             break;
-        case 6:  cilj = pozicijaProvjeraMetal; break; // PROVJERA_PICKUP (koristi metal poziciju za sweep zglobove)
         case 7:  cilj = pozicijaPickup; break;
         case 8:  cilj = pozicijaProvjeraMetal; break;
         case 9:  cilj = pozicijaVoznjaPickup; break;
@@ -167,24 +167,23 @@ void Manipulator::ucitajPreset6Skeniranje(long (*getTof)()) {
     if (getTof != nullptr) tofFnPtr = getTof;
     if (tofFnPtr == nullptr) return; // Ne skeniraj ako nemas funkciju
     
-    // Postavi ruku na PRIPREMA_PICKUP poziciju pa pokreni TOF skeniranje baze
-    skenPocetniKut = (float)pozicijaProvjeraMetal[CH_BAZA]; 
+    // Skeniranje krece od 170 prema 100 stupnjeva
+    skenPocetniKut = 170.0f; 
     skenMinUdaljenost = 9999;
     skenMinKut = skenPocetniKut;
 
-    // Postavi sve zglobove na PRIPREMA_PICKUP, bazu na pocetni kut
-    postaviSve(pozicijaPripremaPickup, 5); 
+    // Postavi zglobove na poziciju za PROVJERA_METAL (to je visina za skeniranje)
+    postaviSve(pozicijaProvjeraMetal, 6); 
 
-    // Inicij sweep: postavi ciljanu bazu na -30 stupnjeva od pocetnog
+    // Inicijalna pozicija baze za pocetak skeniranja
     int tmpKutovi[5];
-    for (int i=0; i<5; i++) tmpKutovi[i] = pozicijaPripremaPickup[i];
-    tmpKutovi[CH_BAZA] = (int)(skenPocetniKut - 30.0f);
-    if (tmpKutovi[CH_BAZA] < 0) tmpKutovi[CH_BAZA] = 0;
+    for (int i=0; i<5; i++) tmpKutovi[i] = pozicijaProvjeraMetal[i];
+    tmpKutovi[CH_BAZA] = (int)skenPocetniKut;
     postaviPoziciju(tmpKutovi);
-    zadnjiPresetIdx = 5; 
-    trenutnoStanje = STANJE_SKEN_LEVO;
-    Serial.print("[SKEN] Start kut: "); Serial.print(skenPocetniKut);
-    Serial.print(" -> "); Serial.println(tmpKutovi[CH_BAZA]);
+    
+    zadnjiPresetIdx = 6; 
+    trenutnoStanje = STANJE_SKEN_LEVO; // Koristimo LEVO za sweep 170 -> 100
+    Serial.println("[SKEN] Start 170 -> 100");
 }
 
 void Manipulator::zapocniCekanjeQR() {
@@ -385,35 +384,27 @@ void Manipulator::azuriraj() {
                 }
             }
             if (!kretanjeAct) {
-                // Stigli u -30°, sad krenemo desno do +30° od pocetnog kuta
-                int tmpKutevi[5];
-                for (int i=0; i<5; i++) tmpKutevi[i] = (int)trenutniKutovi[i];
-                tmpKutevi[CH_BAZA] = (int)(skenPocetniKut + 30.0f);
-                if (tmpKutevi[CH_BAZA] > 270) tmpKutevi[CH_BAZA] = 270;
-                postaviPoziciju(tmpKutevi);
-                trenutnoStanje = STANJE_SKEN_DESNO;
+                if (trenutniKutovi[CH_BAZA] > 100.1f) {
+                    // Nastavi sweep prema 100
+                    int ciljniKut = (int)trenutniKutovi[CH_BAZA] - 2; // Smanjuj po 2 stupnja
+                    if (ciljniKut < 100) ciljniKut = 100;
+                    postaviKut(CH_BAZA, (float)ciljniKut);
+                } else {
+                    // Stigli u 100°, sad namjesti bazu na optimalni kut
+                    int tmpKutevi[5];
+                    for (int i=0; i<5; i++) tmpKutevi[i] = (int)trenutniKutovi[i];
+                    tmpKutevi[CH_BAZA] = (int)skenMinKut;
+                    Serial.print("[SKEN] Optimalni kut: "); Serial.print(skenMinKut);
+                    Serial.print(" ud: "); Serial.println(skenMinUdaljenost);
+                    postaviPoziciju(tmpKutevi);
+                    trenutnoStanje = STANJE_SKEN_NAMJESTI;
+                }
             }
             break;
 
         case STANJE_SKEN_DESNO:
-            // Uzorkuj TOF na svakom koraku
-            if (tofFnPtr) {
-                long tofVal = tofFnPtr();
-                if (tofVal > 0 && tofVal < skenMinUdaljenost) {
-                    skenMinUdaljenost = tofVal;
-                    skenMinKut = trenutniKutovi[CH_BAZA];
-                }
-            }
-            if (!kretanjeAct) {
-                // Stigli u +30°, sad namjesti bazu na optimalni kut
-                int tmpKutevi[5];
-                for (int i=0; i<5; i++) tmpKutevi[i] = (int)trenutniKutovi[i];
-                tmpKutevi[CH_BAZA] = (int)skenMinKut;
-                Serial.print("[SKEN] Optimalni kut: "); Serial.print(skenMinKut);
-                Serial.print(" ud: "); Serial.println(skenMinUdaljenost);
-                postaviPoziciju(tmpKutevi);
-                trenutnoStanje = STANJE_SKEN_NAMJESTI;
-            }
+            // Više se ne koristi u ovom jednosmjernom sweepu
+            trenutnoStanje = STANJE_SKEN_NAMJESTI;
             break;
 
         case STANJE_SKEN_NAMJESTI:
