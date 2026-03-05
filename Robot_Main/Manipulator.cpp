@@ -39,7 +39,7 @@ void Manipulator::postaviPoziciju(const int* poz) {
 
     // Određujemo broj koraka temeljem najvećeg pomaka da zadržimo konstantnu brzinu
     // 0.8 stupnjeva po koraku (pri 20ms refreshu) je brzina koju ste tražili.
-    float brKoraka = maxDelta / 0.8; 
+    float brKoraka = maxDelta / 4.0; 
     if (brKoraka < 1.0) brKoraka = 1.0; 
 
     for (int i = 0; i < 5; i++) {
@@ -88,7 +88,7 @@ void Manipulator::postaviSve(const int* poz, int presetIdx) {
 }
 
 void Manipulator::ucitajPreset(int idx) {
-    if (idx < 0 || idx >= 15) return;
+    if (idx < 0 || idx >= 16) return;
     
     // Budući da ne koristimo EEPROM po želji korisnika, 
     // mapiramo presete na hardkodirane konstante
@@ -109,6 +109,7 @@ void Manipulator::ucitajPreset(int idx) {
         case 12: cilj = pozicijaOstavljanjeD2; break;
         case 13: cilj = pozicijaOstavljanjeD3; break;
         case 14: cilj = pozicijaProvjeraOstavljanje; break;
+        case 15: cilj = pozicijaSafePickup; break;
         default: cilj = pozicijaSafe; break;
     }
 
@@ -170,7 +171,7 @@ void Manipulator::zapocniSekvencu(String sekvenca) {
 
 void Manipulator::azuriraj() {
     unsigned long trenutnoVrijeme = millis();
-    if (trenutnoVrijeme - zadnjeVrijeme < 20) {
+    if (trenutnoVrijeme - zadnjeVrijeme < 10) {
         return; 
     }
     zadnjeVrijeme = trenutnoVrijeme;

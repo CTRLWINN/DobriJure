@@ -17,7 +17,7 @@
 #define REV_SERVO_MAX 2500       // Max PWM puls (REV Smart Servo)
 #define SG90_SERVO_MIN 600       // Min PWM puls (9g SG90 Servo)
 #define SG90_SERVO_MAX 2400      // Max PWM puls (9g SG90 Servo)
-#define KORAK_MK 1.5             // Brzina kretanja (stupnjeva po koraku)
+#define KORAK_MK 3.0             // Brzina kretanja (stupnjeva po koraku)
 
 // Kanali prema RukaTest.ino
 #define CH_BAZA      0
@@ -29,12 +29,13 @@
 // Pozicije (Glavne)
 const int pozicijaParking[5]        = {135, 164, 40, 100, 20};
 const int pozicijaSafe[5]           = {135, 110, 80, 60, 90};
+const int pozicijaSafePickup[5]     = {135, 110, 80, 60, 145}; // SAFE ali hvataljka drzi objekt
 const int pozicijaVoznja[5]         = {135, 140, 60, 150, 25};
 const int pozicijaPripremaQR[5]     = {190, 90, 60, 50, 40};
 const int pozicijaCitanjeQR[5]      = {250, 80, 80, 55, 25};
 const int pozicijaPripremaPickup[5] = {135, 80, 90, 40, 80};
 const int pozicijaPickup[5]         = {135, 65, 130, 70, 145}; // Pretpostavljena greška u nazivu kod korisnika za drugu PRIPREMA_PICKUP
-const int pozicijaProvjeraMetal[5]  = {185, 105, 55, 70, 145};
+const int pozicijaProvjeraMetal[5]  = {185, 105, 50, 70, 145};
 const int pozicijaVoznjaPickup[5]   = {130, 150, 55, 20, 145};
 
 // Pozicije za ostavljanje (D1, D2, D3)

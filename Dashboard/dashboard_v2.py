@@ -383,7 +383,8 @@ class DashboardApp(ctk.CTk):
             "PARKING", "SAFE", "VOZNJA", "PRIPREMA_QR", "CITANJE_QR", 
             "PRIPREMA_PICKUP", "PROVJERA_PICKUP", "PICKUP", "PROVJERA_METAL", 
             "VOZNJA_PICKUP", "OSTAVLJANJE_PRIPREMA", "OSTAVLJANJE_D1", 
-            "OSTAVLJANJE_D2", "OSTAVLJANJE_D3", "PROVJERA_OSTAVLJANJE"
+            "OSTAVLJANJE_D2", "OSTAVLJANJE_D3", "PROVJERA_OSTAVLJANJE",
+            "SAFE_PICKUP"
         ]
         
         # Kutovi definirani unutar aplikacije po novoj logici
@@ -393,16 +394,17 @@ class DashboardApp(ctk.CTk):
             "VOZNJA": [135, 140, 60, 150, 25],
             "PRIPREMA_QR": [190, 90, 60, 50, 40],
             "CITANJE_QR": [250, 80, 80, 55, 25],
-            "PRIPREMA_PICKUP": [135, 80, 40, 30, 80],
+            "PRIPREMA_PICKUP": [135, 80, 90, 40, 80],
             "PROVJERA_PICKUP": [135, 90, 90, 90, 90],
             "PICKUP": [135, 65, 130, 70, 145],
-            "PROVJERA_METAL": [185, 105, 55, 70, 145],
+            "PROVJERA_METAL": [185, 105, 50, 70, 145],
             "VOZNJA_PICKUP": [130, 150, 55, 20, 145],
             "OSTAVLJANJE_PRIPREMA": [135, 90, 90, 90, 90],
             "OSTAVLJANJE_D1": [135, 90, 90, 90, 90],
             "OSTAVLJANJE_D2": [135, 90, 90, 90, 90],
             "OSTAVLJANJE_D3": [135, 90, 90, 90, 90],
-            "PROVJERA_OSTAVLJANJE": [135, 90, 90, 90, 90]
+            "PROVJERA_OSTAVLJANJE": [135, 90, 90, 90, 90],
+            "SAFE_PICKUP": [135, 110, 80, 60, 145]
         }
         
         row_preset = ctk.CTkFrame(col2)
@@ -846,7 +848,12 @@ class DashboardApp(ctk.CTk):
         payload = self.get_payload_from_ui()
         if not payload: return
 
-        json_str = json.dumps(payload)
+        # Filtriraj ključeve koji su samo za prikaz (preset_name) - Arduino ih ne koristi
+        # ali ih zadrzavamo u lokalnoj memoriji misije za prikaz u editoru
+        DISPLAY_ONLY_KEYS = {"preset_name"}
+        send_payload = {k: v for k, v in payload.items() if k not in DISPLAY_ONLY_KEYS}
+        
+        json_str = json.dumps(send_payload)
         self.robot.send_command(json_str) # Send JSON
         
         self.misija_koraci.append(payload)
@@ -1097,7 +1104,20 @@ class DashboardApp(ctk.CTk):
     def start_mission(self):
         if self.mission_running: return
         self.mission_running = True
-        threading.Thread(target=self.run_mission_thread, daemon=True).start()
+        threading.Thread(target=self._wait_start_then_run, daemon=True).start()
+
+    def _wait_start_then_run(self):
+        self.lbl_auto_status.configure(text="⏳ Čekam START gumb na robotu...", text_color="yellow")
+        # Pošalji wait_start i čekaj DONE (fizički gumb pritisnut) - timeout 60s
+        resp = self.robot.send_command_and_wait(json.dumps({"cmd": "wait_start"}), timeout=60.0)
+        if not self.mission_running:
+            return  # Korisnik pritisnuo STOP u međuvremenu
+        if resp and resp.get("status") == "DONE":
+            self.lbl_auto_status.configure(text="▶ START! Izvršavam misiju...", text_color="lime")
+            self.run_mission_thread()
+        else:
+            self.mission_running = False
+            self.lbl_auto_status.configure(text="⚠ Timeout - START nije pritisnut (60s)", text_color="red")
 
     def stop_mission(self):
         self.mission_running = False
@@ -1126,7 +1146,10 @@ class DashboardApp(ctk.CTk):
             self.lbl_auto_status.configure(text=f"Izvršavam: {cmd_type}")
 
             if cmd_type == "check_sensor":
-                resp = self.robot.send_command_and_wait(json.dumps(step))
+                # Arduino handler se zove "read_sensor", ne "check_sensor" - prepisujemo cmd
+                send_check = dict(step)
+                send_check["cmd"] = "read_sensor"
+                resp = self.robot.send_command_and_wait(json.dumps(send_check))
                 last_condition_met = (resp and resp.get("status") == "1")
                 i += 1
                 continue
@@ -1158,25 +1181,28 @@ class DashboardApp(ctk.CTk):
                 i += 1
                 continue
 
+            # Ključevi koji su samo za prikaz - ne šalju se Arduinu
+            DISPLAY_ONLY_KEYS = {"preset_name"}
+            send_step = {k: v for k, v in step.items() if k not in DISPLAY_ONLY_KEYS}
+            
             # Standardne komande kretanja, ruke i kamere
             if cmd_type == "wait":
                 ms = int(step.get("val", 0))
                 time.sleep(ms / 1000.0)
             elif cmd_type in ["straight", "turn", "pivot", "move_dual", "cal_imu"]:
-                self.robot.send_command_and_wait(json.dumps(step), timeout=20.0)
+                self.robot.send_command_and_wait(json.dumps(send_step), timeout=20.0)
             elif cmd_type in ["arm", "arm_pos"]:
-                self.robot.send_command(json.dumps(step))
-                time.sleep(2.0)
+                self.robot.send_command(json.dumps(send_step))
+                time.sleep(3.0)
             elif cmd_type == "nicla":
-                # Šaljemo ga raw JSON-om u Arduino koji će znati rastaviti
-                self.robot.send_command(json.dumps(step))
+                self.robot.send_command(json.dumps(send_step))
                 time.sleep(0.5)
             elif cmd_type == "raw":
                 # Stara komanda (npr. "ARM:1" ili "NICLA:q")
                 self.robot.send_command(step["val"])
                 time.sleep(0.5)
             else:
-                self.robot.send_command(json.dumps(step))
+                self.robot.send_command(json.dumps(send_step))
             
             i += 1
 
@@ -1242,19 +1268,19 @@ class DashboardApp(ctk.CTk):
     def on_key_press(self, event):
         if self.tabview.get() != "Učenje (Manual)": return
         
+        # Ignoriraj ako korisnik tipka u neki Entry widget (npr. upisuje brzinu ili kut)
+        focused = self.focus_get()
+        if isinstance(focused, ctk.CTkEntry) or isinstance(focused, tk.Entry):
+            return
+        
         key = event.keysym
         speed = 100
         cmd = ""
         
-        if key == 'KP_Up' or key == '8': cmd = f"MAN:FWD,{speed}"
-        elif key == 'KP_Down' or key == '2': cmd = f"MAN:BCK,{speed}"
-        elif key == 'KP_Left' or key == '4': cmd = f"MAN:LFT,{speed}"
-        elif key == 'KP_Right' or key == '6': cmd = f"MAN:RGT,{speed}"
-        elif key == 'space': 
-            self.waypoints_list.configure(state="normal")
-            self.waypoints_list.insert("end", f"Waypoint Saved\n")
-            self.waypoints_list.configure(state="disabled")
-            return
+        if key == 'KP_Up': cmd = f"MAN:FWD,{speed}"
+        elif key == 'KP_Down': cmd = f"MAN:BCK,{speed}"
+        elif key == 'KP_Left': cmd = f"MAN:LFT,{speed}"
+        elif key == 'KP_Right': cmd = f"MAN:RGT,{speed}"
             
         if cmd: self.robot.send_command(cmd)
 
@@ -1290,11 +1316,22 @@ class DashboardApp(ctk.CTk):
                 self.log_box.delete("1.0", "end")
                 self.log_box.insert("end", content)
             
-            # Optional: Display loaded filename in label if exists, or just log it
             print(f"Loaded mission from {filename}")
+            self.lbl_auto_status.configure(text="Misija učitana - šaljem ruku u PARKING...", text_color="orange")
+            
+            # Odgoditi slanje 300ms da se filedialog prozor potpuno zatvori
+            # inače Tkinter fokus interferira s BLE asyncio loopom (bug pri 2. učitavanju)
+            parking_cmd = json.dumps({"cmd": "arm_pos", "angles": [135, 164, 40, 100, 20]})
+            self.after(300, lambda: self._send_parking_and_status(parking_cmd))
             
         except Exception as e:
             messagebox.showerror("Error", f"Could not load: {e}")
+
+    def _send_parking_and_status(self, parking_cmd):
+        self.robot.send_command(parking_cmd)
+        self.lbl_auto_status.configure(text="✅ Ruka u PARKING - pritisni POKRENI MISIJU.", text_color="orange")
+        print("Arm → PARKING (čeka START)")
+
 
     def on_ble_disconnect(self):
         self.after(0, self._handle_disconnect_ui)

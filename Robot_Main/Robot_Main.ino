@@ -16,7 +16,7 @@
  * Hardware se inicijalizira vanjskim funkcijama.
  */
 
-StaticJsonDocument<200> doc;
+StaticJsonDocument<512> doc;
 Manipulator ruka;
 
 void setup() {
@@ -255,6 +255,18 @@ void loop() {
                     resetirajGyro();
                     resetirajMag();
                     Serial2.println("{\"status\": \"OK\"}");
+                }
+                else if (strcmp(cmd, "wait_start") == 0) {
+                    // Cekaj pritisak fizickog START gumba (pin 23)
+                    // U meduvremenu nastavljamo slati telemetriju da BLE ne ispada
+                    Serial.println("Cekam START gumb...");
+                    while (!isStartPressed()) {
+                        posaljiTelemetriju();
+                        ruka.azuriraj();
+                        delay(50);
+                    }
+                    Serial2.println("{\"status\": \"DONE\"}");
+                    Serial.println("START gumb pritisnut!");
                 }
                 else {
                     Serial.println("Unknown command.");
