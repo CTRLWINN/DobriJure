@@ -22,7 +22,7 @@ void inicijalizirajDisplay();
  * @param metal True ako je detektiran metal
  * @param tof Udaljenost izmjerena TOF senzorom
  */
-void azurirajDisplay(String qr, String pozicija, bool metal, long tof);
+void azurirajDisplay(String qr, String pozicija, bool metal, long tof, char kameraMod = '0');
 
 /**
  * Prikazuje veliki centrirani tekst preko cijelog ekrana.

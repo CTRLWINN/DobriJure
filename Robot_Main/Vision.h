@@ -33,6 +33,16 @@ float dohvatiVisionError();
 long dohvatiVisionUdaljenost();
 
 /**
+ * Zapisuje trenutno poznati mod kamere s kojim Robot radi.
+ */
+void postaviKameraMod(char mod);
+
+/**
+ * Dohvaća zadnje poslani mod prema kameri.
+ */
+char dohvatiKameraMod();
+
+/**
  * Vraća IP adresu Nicle na wifiju
  */
 String dohvatiVisionIP();
@@ -41,5 +51,12 @@ String dohvatiVisionIP();
  * Briše zadnji pročitani QR kod (npr. nakon obrade).
  */
 void obrisiZadnjiQR();
+
+/**
+ * Vraća lokaciju za spremnik pojedinog materijala (npr. "D1", "D2")
+ */
+String dohvatiOdredisteMetal();
+String dohvatiOdredistePlastika();
+String dohvatiOdredisteSpuzva();
 
 #endif // VISION_H

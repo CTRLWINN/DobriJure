@@ -105,8 +105,12 @@ class RobotController:
                                     "ind": parts[8],
                                     "yaw": parts[9] if len(parts) > 9 else "0",
                                     "gyro": parts[10] if len(parts) > 10 else "0",
-                                    "tof": parts[11] if len(parts) > 11 else "0",
-                                    "ip": parts[12] if len(parts) > 12 else "0.0.0.0"
+                                    "gz": parts[11] if len(parts) > 11 else "0",
+                                    "tof": parts[12] if len(parts) > 12 else "0",
+                                    "ip": parts[13] if len(parts) > 13 else "0.0.0.0",
+                                    "destM": parts[14] if len(parts) > 14 else "-",
+                                    "destP": parts[15] if len(parts) > 15 else "-",
+                                    "destS": parts[16] if len(parts) > 16 else "-"
                                 }
                                 if self.on_telemetry_callback:
                                     self.on_telemetry_callback(data_dict)
@@ -372,28 +376,54 @@ class DashboardApp(ctk.CTk):
         ctk.CTkButton(btn_row_calib, text="Start Stream", command=self.start_video_stream).pack(side="left", padx=2)
         ctk.CTkButton(btn_row_calib, text="Prekini Stream", fg_color="red", command=self.stop_calibration_stream).pack(side="left", padx=2)
         
-        # Color Sliders
-        ctk.CTkLabel(col2, text="Kalibracija Boja").pack()
-        self.combo_obj = ctk.CTkComboBox(col2, values=["BOCA", "LIMENKA", "SPUZVA"])
-        self.combo_obj.pack(pady=5)
+        # Manipulator (Servo) Controls
+        ctk.CTkLabel(col2, text="Upravljanje Servo Motorima", font=("Arial", 16, "bold")).pack(pady=10)
         
-        # LAB Inputs
-        self.lab_vars = {}
-        lab_labels = ["L Min", "L Max", "A Min", "A Max", "B Min", "B Max"]
-        lab_defaults = [30, 100, -64, -8, -32, 32] 
+        self.preset_names = [
+            "PARKING", "SAFE", "VOZNJA", "PRIPREMA_QR", "CITANJE_QR", 
+            "PRIPREMA_PICKUP", "PROVJERA_PICKUP", "PICKUP", "PROVJERA_METAL", 
+            "VOZNJA_PICKUP", "OSTAVLJANJE_PRIPREMA", "OSTAVLJANJE_D1", 
+            "OSTAVLJANJE_D2", "OSTAVLJANJE_D3", "PROVJERA_OSTAVLJANJE"
+        ]
         
-        self.lab_frame = ctk.CTkFrame(col2)
-        self.lab_frame.pack(pady=5)
+        # Kutovi definirani unutar aplikacije po novoj logici
+        self.preset_angles = {
+            "PARKING": [135, 164, 40, 100, 20],
+            "SAFE": [135, 110, 80, 60, 90],
+            "VOZNJA": [135, 140, 60, 150, 25],
+            "PRIPREMA_QR": [190, 90, 60, 50, 40],
+            "CITANJE_QR": [250, 80, 80, 55, 25],
+            "PRIPREMA_PICKUP": [135, 80, 40, 30, 80],
+            "PROVJERA_PICKUP": [135, 90, 90, 90, 90],
+            "PICKUP": [135, 65, 130, 70, 145],
+            "PROVJERA_METAL": [185, 105, 55, 70, 145],
+            "VOZNJA_PICKUP": [130, 150, 55, 20, 145],
+            "OSTAVLJANJE_PRIPREMA": [135, 90, 90, 90, 90],
+            "OSTAVLJANJE_D1": [135, 90, 90, 90, 90],
+            "OSTAVLJANJE_D2": [135, 90, 90, 90, 90],
+            "OSTAVLJANJE_D3": [135, 90, 90, 90, 90],
+            "PROVJERA_OSTAVLJANJE": [135, 90, 90, 90, 90]
+        }
         
-        for i, label in enumerate(lab_labels):
-            lbl = ctk.CTkLabel(self.lab_frame, text=label, width=40)
-            lbl.grid(row=i//2, column=(i%2)*2, padx=2)
-            entry = ctk.CTkEntry(self.lab_frame, width=50)
-            entry.grid(row=i//2, column=(i%2)*2+1, padx=2)
-            entry.insert(0, str(lab_defaults[i]))
-            self.lab_vars[label] = entry
-            
-        ctk.CTkButton(col2, text="Pošalji Boje (SET)", command=self.send_color).pack(pady=5)
+        row_preset = ctk.CTkFrame(col2)
+        row_preset.pack(pady=5)
+        self.combo_preset = ctk.CTkComboBox(row_preset, values=self.preset_names)
+        self.combo_preset.pack(side="left", padx=5)
+        
+        ctk.CTkButton(row_preset, text="Učitaj", width=60, command=self.load_preset).pack(side="left", padx=2)
+        ctk.CTkButton(row_preset, text="Spremi (Za Misiju)", width=60, fg_color="orange", command=self.save_preset).pack(side="left", padx=2)
+
+        self.sliders = []
+        self.servo_entries = []
+        servo_names = ["Baza", "Rame", "Lakat", "Zglob", "Hvat"]
+        default_angles = [135, 164, 40, 100, 20]
+        
+        self.frame_sliders = ctk.CTkScrollableFrame(col2, height=180)
+        self.frame_sliders.pack(fill="both", expand=True, padx=20, pady=5)
+
+        for i in range(5):
+            max_angle = 270 if i == 0 else 180
+            self.create_servo_control(self.frame_sliders, i, servo_names[i], max_angle, default_angles[i])
 
     def create_servo_control(self, parent, idx, name, max_angle=180, default_val=90):
         f = ctk.CTkFrame(parent)
@@ -507,18 +537,7 @@ class DashboardApp(ctk.CTk):
     def send_servo(self, ch, val):
         self.robot.send_command(f"SERVO:{ch},{val:.1f}")
         
-    def send_color(self):
-        obj = self.combo_obj.get()
-        vals = []
-        labels = ["L Min", "L Max", "A Min", "A Max", "B Min", "B Max"]
-        try:
-            for l in labels:
-                vals.append(self.lab_vars[l].get())
-            cmd = f"SET:{obj},{','.join(vals)}"
-            print(f"Sending Color Config: {cmd}")
-            self.robot.send_command(cmd)
-        except Exception as e:
-            messagebox.showerror("Error", f"Invalid Values: {e}")
+    # send_color uklonjeno jer više nema kalibracije boja na sučelju
 
     def start_video_stream(self):
         ip = self.entry_ip.get()
@@ -571,6 +590,7 @@ class DashboardApp(ctk.CTk):
             ("SKRENI (Pivot)", "pivot"),
             ("RUKA", "arm"),
             ("PROVJERI SENZOR", "check_sensor"),
+            ("KAMERA MOD", "nicla"),
             ("AKO JE TOČNO", "if_true"),
             ("INAČE", "if_false"),
             ("KRAJ BLOKA", "end_if"),
@@ -607,10 +627,8 @@ class DashboardApp(ctk.CTk):
         # Row 2: IMU (Gyro & Mag)
         r2 = ctk.CTkFrame(self.frame_telemetry)
         r2.pack(fill="x", pady=2)
-        self.lbl_gyro = ctk.CTkLabel(r2, text="Gyro: 0°", text_color="cyan", font=("Consolas", 12))
-        self.lbl_gyro.pack(side="left", padx=5)
-        self.lbl_mag  = ctk.CTkLabel(r2, text="Mag: 0°", text_color="orange", font=("Consolas", 12))
-        self.lbl_mag.pack(side="right", padx=5)
+        self.lbl_imu_manual = ctk.CTkLabel(r2, text="IMU: Gyro 0.0° | Mag 0.0°", font=("Arial", 13, "bold"), text_color="cyan")
+        self.lbl_imu_manual.pack(pady=2)
 
         # Row 3: Encoders
         r3 = ctk.CTkFrame(self.frame_telemetry)
@@ -631,6 +649,12 @@ class DashboardApp(ctk.CTk):
         r5.pack(fill="x", pady=2)
         self.lbl_ind = ctk.CTkLabel(r5, text="Senzor: Čisto", font=("Consolas", 13, "bold"), text_color="white")
         self.lbl_ind.pack(pady=2)
+
+        # Row 6: Odredišta (Spremnici)
+        r6 = ctk.CTkFrame(self.frame_telemetry)
+        r6.pack(fill="x", pady=2)
+        self.lbl_dest = ctk.CTkLabel(r6, text="Odr: M:- P:- S:-", font=("Consolas", 11), text_color="yellow")
+        self.lbl_dest.pack(pady=2)
 
         # 2. Inspector
         self.frame_inspector = ctk.CTkFrame(self.tab_manual, corner_radius=0)
@@ -653,39 +677,7 @@ class DashboardApp(ctk.CTk):
         self.entry_min = self.create_config_row(self.frame_move, "Min Brz:", "80", self.send_min)
         self.entry_kp  = self.create_config_row(self.frame_move, "Kp:", "2.0", self.send_kp)
 
-        # Desno: Manipulator
-        self.frame_manip = ctk.CTkFrame(self.frame_bottom_inspector)
-        self.frame_manip.pack(side="right", fill="both", expand=True, padx=2, pady=2)
-        
-        ctk.CTkLabel(self.frame_manip, text="Manipulator", font=("Arial", 12, "bold")).pack(pady=2)
-        
-        # Preseti
-        self.preset_names = [
-            "Parkiraj", "Voznja", "Uzmi_Boca", "Uzmi_Limenka", "Uzmi_Spuzva",
-            "Spremi_1", "Spremi_2", "Spremi_3",
-            "Iz_Sprem_1", "Iz_Sprem_2", "Iz_Sprem_3",
-            "Dostava_1", "Dostava_2", "Dostava_3", "Extra"
-        ]
-        self.combo_preset = ctk.CTkComboBox(self.frame_manip, values=self.preset_names)
-        self.combo_preset.pack(pady=2)
-        
-        row_preset = ctk.CTkFrame(self.frame_manip)
-        row_preset.pack(pady=2)
-        ctk.CTkButton(row_preset, text="Učitaj", width=60, command=self.load_preset).pack(side="left", padx=2)
-        ctk.CTkButton(row_preset, text="Spremi", width=60, fg_color="orange", command=self.save_preset).pack(side="left", padx=2)
-
-        # Slideri
-        self.sliders = []
-        self.servo_entries = []
-        servo_names = ["Baza", "Rame", "Lakat", "Zglob", "Hvat"]
-        default_angles = [135, 150, 40, 100, 90]
-        
-        self.frame_sliders = ctk.CTkScrollableFrame(self.frame_manip, height=150)
-        self.frame_sliders.pack(fill="both", expand=True, padx=2)
-
-        for i in range(5):
-            max_angle = 360 if i == 0 else 180
-            self.create_servo_control(self.frame_sliders, i, servo_names[i], max_angle, default_angles[i])
+        # Manipulator opcije su prebačene na prvi tab (Kalibracija pozicija)
 
         # Content Inspector (Gornji dio)
         self.inspector_content = ctk.CTkFrame(self.frame_inspector, fg_color="transparent")
@@ -721,14 +713,16 @@ class DashboardApp(ctk.CTk):
             "move_dual": "VOZI (L/D)",
             "turn": "OKRENI (Spot)",
             "pivot": "SKRENI (Pivot)",
-            "arm": "RUKA",
+            "arm": "RUKA (Preset)",
+            "arm_pos": "RUKA (Pozicija)",
             "wait": "ČEKAJ",
             "stop": "STANI",
             "check_sensor": "PROVJERI SENZOR",
             "if_true": "AKO JE TOČNO",
             "if_false": "INAČE",
             "end_if": "KRAJ BLOKA",
-            "cal_imu": "KALIBRIRAJ IMU"
+            "cal_imu": "KALIBRIRAJ IMU",
+            "nicla": "KAMERA MOD"
         }
         
     def load_inspector(self, cmd_type, data=None):
@@ -755,11 +749,31 @@ class DashboardApp(ctk.CTk):
             self.add_param_input("Brzina (0-255, 0=Default):", "spd", data)
             ctk.CTkLabel(self.inspector_content, text="Poz = Desno, Neg = Lijevo", font=("Arial", 10)).pack()
         elif cmd_type == "arm":
-            ctk.CTkLabel(self.inspector_content, text="Pozicija Ruke:").pack(anchor="w", padx=10)
+            ctk.CTkLabel(self.inspector_content, text="Pozicija Ruke (po nazivu):").pack(anchor="w", padx=10)
             self.combo_arm = ctk.CTkOptionMenu(self.inspector_content, values=self.preset_names)
             self.combo_arm.pack(fill="x", padx=10, pady=5)
             if data and "val" in data: self.combo_arm.set(data["val"])
             self.entry_params["val"] = self.combo_arm
+        elif cmd_type == "arm_pos":
+            angles = data.get("angles", [90,90,90,90,90]) if data else [90,90,90,90,90]
+            self.add_param_input("Baza:", "a0", {"a0": angles[0]})
+            self.add_param_input("Rame:", "a1", {"a1": angles[1]})
+            self.add_param_input("Lakat:", "a2", {"a2": angles[2]})
+            self.add_param_input("Zglob:", "a3", {"a3": angles[3]})
+            self.add_param_input("Hvataljka:", "a4", {"a4": angles[4]})
+        elif cmd_type == "nicla":
+            ctk.CTkLabel(self.inspector_content, text="Odaberi Mod Kamere:").pack(anchor="w", padx=10)
+            nicla_mods = ["0 - IDLE", "1 - TOF (Mjerenje)", "2 - CESTA (Linija)", "3 - QR (Skaner)"]
+            self.combo_nicla = ctk.CTkOptionMenu(self.inspector_content, values=nicla_mods)
+            self.combo_nicla.pack(fill="x", padx=10, pady=5)
+            if data and "mod" in data: 
+                # Pokušaj postaviti stari očitani mod, ali ako je u misiji zapisano samo "c", pretvori u opciju padajuceg izbornika
+                val = data["mod"]
+                for nm in nicla_mods:
+                    if nm.startswith(val) or val in nm:
+                        self.combo_nicla.set(nm)
+                        break
+            self.entry_params["mod"] = self.combo_nicla
         elif cmd_type == "check_sensor":
             ctk.CTkLabel(self.inspector_content, text="Tip senzora:").pack(anchor="w", padx=10)
             self.combo_sens = ctk.CTkOptionMenu(self.inspector_content, values=["induktivni"])
@@ -803,6 +817,26 @@ class DashboardApp(ctk.CTk):
                          except: payload[key] = val_str
                 elif isinstance(widget, ctk.CTkOptionMenu):
                     payload[key] = widget.get()
+            
+            # Postprocesiranje
+            if self.current_cmd_type == "nicla" and "mod" in payload:
+                val = payload["mod"]
+                if "0" in val: payload["mod"] = "0"
+                elif "1" in val or "TOF" in val: payload["mod"] = "u"
+                elif "2" in val or "CESTA" in val: payload["mod"] = "c"
+                elif "3" in val or "QR" in val: payload["mod"] = "q"
+                
+            if self.current_cmd_type == "arm" and "val" in payload:
+                # Automatski prebaci 'arm' u 'arm_pos' (čisti kutevi u misiju!)
+                preset = payload["val"]
+                if preset in self.preset_angles:
+                    payload = {"cmd": "arm_pos", "angles": self.preset_angles[preset], "preset_name": preset}
+            
+            if self.current_cmd_type == "arm_pos" and "a0" in payload:
+                angles = [int(payload["a0"]), int(payload["a1"]), int(payload["a2"]), int(payload["a3"]), int(payload["a4"])]
+                preset_name = payload.get("preset_name", "CUSTOM")
+                payload = {"cmd": "arm_pos", "angles": angles, "preset_name": preset_name}
+                
             return payload
         except ValueError:
             messagebox.showerror("Error", "Greska u brojevima!")
@@ -906,10 +940,10 @@ class DashboardApp(ctk.CTk):
             d = self.latest_telemetry
             # Update Labels
             # Update Labels
-            self.lbl_dist.configure(text=f"Dist: {d['cm']} cm")
-            self.lbl_arm.configure(text=f"Arm: {d['arm']}")
-            self.lbl_gyro.configure(text=f"Gyro: {d['gyro']}°")
-            self.lbl_mag.configure(text=f"Mag: {d['yaw']}°")
+            self.lbl_dist.configure(text=f"Dist: {d.get('cm', '0')} cm")
+            self.lbl_arm.configure(text=f"Arm: {d.get('arm', '-')}")
+            if hasattr(self, 'lbl_imu_manual'):
+                self.lbl_imu_manual.configure(text=f"IMU: {d.get('gyro', '0.0')}° | {d.get('gz', '0.0')}°/s")
             if hasattr(self, 'lbl_tof') and 'tof' in d:
                 self.lbl_tof.configure(text=f"TOF: {d['tof']} mm")
             if hasattr(self, 'lbl_nicla_ip') and 'ip' in d and d['ip'] != "0.0.0.0":
@@ -925,13 +959,20 @@ class DashboardApp(ctk.CTk):
                     self.lbl_ind.configure(text="Senzor: LIMENKA", text_color="#00FF00") # Zelena
                 else:
                     self.lbl_ind.configure(text="Senzor: Čisto", text_color="white")
+                    
+            # Odredista
+            if hasattr(self, 'lbl_dest') and 'destM' in d:
+                self.lbl_dest.configure(text=f"Odr: M:{d['destM']} P:{d['destP']} S:{d['destS']}")
             
             # Auto Tab Updates
             if hasattr(self, 'lbl_auto_dist'):
-                self.lbl_auto_dist.configure(text=f"Distance: {d['cm']} cm | Enc: {d['pL']}/{d['pR']}")
-                self.lbl_auto_sensors.configure(text=f"US: F={d['usF']} B={d['usB']} L={d['usL']} R={d['usR']} | I={d['ind']}")
+                self.lbl_auto_dist.configure(text=f"Distance (TOF): {d.get('tof', '0')} mm | Enc: {d.get('pL', '')}/{d.get('pR', '')}")
+            if hasattr(self, 'lbl_auto_imu'):
+                self.lbl_auto_imu.configure(text=f"IMU: Gyro {d.get('gyro', '0.0')}° | Raw {d.get('gz', '0.0')}°/s")
+            if hasattr(self, 'lbl_auto_sensors'):
+                self.lbl_auto_sensors.configure(text=f"US: F={d.get('usF')} B={d.get('usB')} L={d.get('usL')} R={d.get('usR')} | I={d.get('ind')}")
             
-        self.after(100, self.ui_updater)
+        self.after(50, self.ui_updater)
 
     def exec_record_arm(self):
         preset = self.man_preset_combo.get()
@@ -1010,9 +1051,23 @@ class DashboardApp(ctk.CTk):
         ctk.CTkButton(btn_row_auto, text="Osvježi Stream (IP)", command=self.refresh_stream).pack(side="left", padx=2)
         ctk.CTkButton(btn_row_auto, text="Prekini Stream", fg_color="red", command=self.stop_auto_stream).pack(side="left", padx=2)
 
+        # Kamera Modovi - NOVO!
+        ctk.CTkLabel(left_col, text="Kamera Modovi").pack(pady=(10, 0))
+        btn_row_cam_mods = ctk.CTkFrame(left_col, fg_color="transparent")
+        btn_row_cam_mods.pack(pady=2)
+        
+        ctk.CTkButton(btn_row_cam_mods, text="IDLE", width=60, fg_color="orange", command=lambda: self.robot.send_command("NICLA:0")).pack(side="left", padx=2)
+        ctk.CTkButton(btn_row_cam_mods, text="TOF", width=60, command=lambda: self.robot.send_command("NICLA:u")).pack(side="left", padx=2)
+        ctk.CTkButton(btn_row_cam_mods, text="CESTA", width=60, command=lambda: self.robot.send_command("NICLA:c")).pack(side="left", padx=2)
+        ctk.CTkButton(btn_row_cam_mods, text="QR", width=60, command=lambda: self.robot.send_command("NICLA:q")).pack(side="left", padx=2)
+
         ctk.CTkLabel(left_col, text="--- Telemetrija ---").pack(pady=10)
-        self.lbl_auto_dist = ctk.CTkLabel(left_col, text="Distance: 0.0 cm")
+        self.lbl_auto_dist = ctk.CTkLabel(left_col, text="Distance (TOF): 0 mm", font=("Arial", 14))
         self.lbl_auto_dist.pack()
+        
+        self.lbl_auto_imu = ctk.CTkLabel(left_col, text="IMU: Gyro 0.0° | Mag 0.0°", font=("Arial", 14, "bold"), text_color="cyan")
+        self.lbl_auto_imu.pack(pady=5)
+        
         self.lbl_auto_sensors = ctk.CTkLabel(left_col, text="Sensors: -")
         self.lbl_auto_sensors.pack()
         self.lbl_auto_status = ctk.CTkLabel(left_col, text="Robot Status: IDLE", text_color="orange")
@@ -1057,7 +1112,9 @@ class DashboardApp(ctk.CTk):
             if not line or line.startswith("#"): continue
             try:
                 mission.append(json.loads(line))
-            except: pass
+            except:
+                # Ako nije JSON, pospremi kao raw string objekt
+                mission.append({"cmd": "raw", "val": line})
 
         last_condition_met = True
         i = 0
@@ -1101,15 +1158,23 @@ class DashboardApp(ctk.CTk):
                 i += 1
                 continue
 
-            # Standardne komande kretanja i ruke
+            # Standardne komande kretanja, ruke i kamere
             if cmd_type == "wait":
                 ms = int(step.get("val", 0))
                 time.sleep(ms / 1000.0)
             elif cmd_type in ["straight", "turn", "pivot", "move_dual", "cal_imu"]:
                 self.robot.send_command_and_wait(json.dumps(step), timeout=20.0)
-            elif cmd_type == "arm":
+            elif cmd_type in ["arm", "arm_pos"]:
                 self.robot.send_command(json.dumps(step))
                 time.sleep(2.0)
+            elif cmd_type == "nicla":
+                # Šaljemo ga raw JSON-om u Arduino koji će znati rastaviti
+                self.robot.send_command(json.dumps(step))
+                time.sleep(0.5)
+            elif cmd_type == "raw":
+                # Stara komanda (npr. "ARM:1" ili "NICLA:q")
+                self.robot.send_command(step["val"])
+                time.sleep(0.5)
             else:
                 self.robot.send_command(json.dumps(step))
             
@@ -1147,20 +1212,32 @@ class DashboardApp(ctk.CTk):
             messagebox.showerror("Error", "Invalid Pulse Value")
 
     def save_preset(self):
-        name = self.combo_preset.get()
         try:
-             idx = self.preset_names.index(name)
-             self.robot.send_command(f"SAVE_PRESET:{idx}")
-        except ValueError:
-             messagebox.showerror("Error", "Unknown Preset Name")
+            kutevi = [int(s.get()) for s in self.sliders]
+            # Uključi bazno ime preseta kao napomenu u misiji kod custom dodavanja
+            step = {"cmd": "arm_pos", "angles": kutevi, "preset_name": self.combo_preset.get() + "-custom"}
+            self.misija_koraci.append(step)
+            self.refresh_editor()
+            messagebox.showinfo("Spremljeno", f"Trenutni kutevi dodani u misiju kao custom pozicija:\n{kutevi}")
+        except Exception as e:
+            messagebox.showerror("Greška", f"Nije moguće dodati u misiju: {e}")
 
     def load_preset(self):
         name = self.combo_preset.get()
-        try:
-             idx = self.preset_names.index(name)
-             self.robot.send_command(f"LOAD_PRESET:{idx}")
-        except ValueError:
-             messagebox.showerror("Error", "Unknown Preset Name")
+        if name in self.preset_angles:
+            kutevi = self.preset_angles[name]
+            # Pošalji robotu
+            payload = {"cmd": "arm_pos", "angles": kutevi}
+            self.robot.send_command(json.dumps(payload))
+            
+            # Ažuriraj lokalne slidere automatski
+            for i in range(5):
+                self.sliders[i].set(kutevi[i])
+                self.servo_entries[i].delete(0, "end")
+                self.servo_entries[i].insert(0, str(kutevi[i]))
+                
+        else:
+            messagebox.showerror("Error", "Nepoznata pozicija")
 
     def on_key_press(self, event):
         if self.tabview.get() != "Učenje (Manual)": return

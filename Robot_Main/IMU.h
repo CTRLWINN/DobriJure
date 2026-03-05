@@ -59,11 +59,16 @@ void resetirajGyro();
  * Korisno za resetiranje smjera bez fizičkog pomicanja robota.
  */
 void resetirajMag();
+ 
+/**
+ * Vraća sirovu brzinu rotacije oko Z osi (stupnjeva/sekundi).
+ */
+float dohvatiGyroZ();
 
 /**
- * Vraća ubrzanje po Z osi.
- * Korisno za detekciju udaraca/nagiba. (G-force)
- */
+  * Vraća ubrzanje po Z osi.
+  * Korisno za detekciju udaraca/nagiba. (G-force)
+  */
 float dohvatiAccelZ();
 
 #endif // IMU_H

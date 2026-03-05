@@ -15,10 +15,10 @@ RobotConfig config;
 
 // Imena preseta (usklađeno s Dashboardom)
 const char* presetNames[] = {
-    "Parkiraj", "Voznja", "Uzmi_Boca", "Uzmi_Limenka", "Uzmi_Spuzva",
-    "Spremi_1", "Spremi_2", "Spremi_3",
-    "Iz_Sprem_1", "Iz_Sprem_2", "Iz_Sprem_3",
-    "Dostava_1", "Dostava_2", "Dostava_3", "Extra"
+    "PARKING", "SAFE", "VOZNJA", "PRIPREMA_QR", "CITANJE_QR", 
+    "PRIPREMA_PICKUP", "PROVJERA_PICKUP", "PICKUP", "PROVJERA_METAL", 
+    "VOZNJA_PICKUP", "OSTAVLJANJE_PRIPREMA", "OSTAVLJANJE_D1", 
+    "OSTAVLJANJE_D2", "OSTAVLJANJE_D3", "PROVJERA_OSTAVLJANJE"
 };
 
 void inicijalizirajHardware() {

@@ -23,22 +23,28 @@ int Manipulator::kutU_Pulseve(int kanal, float kut) {
     if (kut < 0) kut = 0;
 
     // Različiti rasponi ovisno o motoru
-    if (kanal == CH_ZGLOB) {
+    if (kanal == CH_ZGLOB || kanal == CH_HVATALJKA) {
         return map((long)kut, 0, maxStupnjeva, SG90_SERVO_MIN, SG90_SERVO_MAX);
     } else {
         return map((long)kut, 0, maxStupnjeva, REV_SERVO_MIN, REV_SERVO_MAX);
     }
 }
 
-void Manipulator::postaviPoziciju(const int poz[5]) {
-    // Izračunaj korak za svaki motor da bi stigli istovremeno (150 koraka kao u testu)
+void Manipulator::postaviPoziciju(const int* poz) {
+    float maxDelta = 0;
+    for (int i = 0; i < 5; i++) {
+        float d = abs(poz[i] - trenutniKutovi[i]);
+        if (d > maxDelta) maxDelta = d;
+    }
+
+    // Određujemo broj koraka temeljem najvećeg pomaka da zadržimo konstantnu brzinu
+    // 0.8 stupnjeva po koraku (pri 20ms refreshu) je brzina koju ste tražili.
+    float brKoraka = maxDelta / 0.8; 
+    if (brKoraka < 1.0) brKoraka = 1.0; 
+
     for (int i = 0; i < 5; i++) {
         ciljaniKutovi[i] = poz[i];
-        if (i == CH_HVATALJKA) {
-            brzine[i] = (ciljaniKutovi[i] - trenutniKutovi[i]) / 75.0; // Duplo veća brzina za hvataljku
-        } else {
-            brzine[i] = (ciljaniKutovi[i] - trenutniKutovi[i]) / 150.0;
-        }
+        brzine[i] = (ciljaniKutovi[i] - trenutniKutovi[i]) / brKoraka;
     }
 }
 
@@ -72,34 +78,41 @@ bool Manipulator::jesuLiMotoriStigli() {
 }
 
 void Manipulator::parkiraj() {
-    if (trenutnoStanje == STANJE_PARKIRANJE && jesuLiMotoriStigli()) return;
-    postaviPoziciju(pozicijaSafe);
-    trenutnoStanje = STANJE_IDUCI_U_SAFE_PRIJE_PARKING;
-    zadnjiPresetIdx = 0;
+    postaviSve(pozicijaParking, 0);
+}
+
+void Manipulator::postaviSve(const int* poz, int presetIdx) {
+    postaviPoziciju(poz);
+    zadnjiPresetIdx = presetIdx;
+    trenutnoStanje = STANJE_MIRUJE;
 }
 
 void Manipulator::ucitajPreset(int idx) {
     if (idx < 0 || idx >= 15) return;
     
-    // Konverzija float kutova iz configa u int za postaviPoziciju
-    int kuteviInt[5];
-    for(int i=0; i<5; i++) {
-        kuteviInt[i] = (int)config.presets[idx].angles[i];
+    // Budući da ne koristimo EEPROM po želji korisnika, 
+    // mapiramo presete na hardkodirane konstante
+    const int* cilj = NULL;
+    switch(idx) {
+        case 0:  cilj = pozicijaParking; break;
+        case 1:  cilj = pozicijaSafe; break;
+        case 2:  cilj = pozicijaVoznja; break;
+        case 3:  cilj = pozicijaPripremaQR; break;
+        case 4:  cilj = pozicijaCitanjeQR; break;
+        case 5:  cilj = pozicijaPripremaPickup; break;
+        case 6:  cilj = pozicijaSafe; break; // PROVJERA_PICKUP (nije definirana)
+        case 7:  cilj = pozicijaPickup; break;
+        case 8:  cilj = pozicijaProvjeraMetal; break;
+        case 9:  cilj = pozicijaVoznjaPickup; break;
+        case 10: cilj = pozicijaOstavljanjePriprema; break;
+        case 11: cilj = pozicijaOstavljanjeD1; break;
+        case 12: cilj = pozicijaOstavljanjeD2; break;
+        case 13: cilj = pozicijaOstavljanjeD3; break;
+        case 14: cilj = pozicijaProvjeraOstavljanje; break;
+        default: cilj = pozicijaSafe; break;
     }
 
-    if (zadnjiPresetIdx == 0 && idx != 0 && trenutnoStanje != STANJE_IDUCI_U_SAFE_IZ_PARKING) {
-        // Spremi gdje zapravo želimo ići
-        for(int i=0; i<5; i++) odgodeniCiljevi[i] = kuteviInt[i];
-        // Prvo u Safe
-        postaviPoziciju(pozicijaSafe);
-        trenutnoStanje = STANJE_IDUCI_U_SAFE_IZ_PARKING;
-        zadnjiPresetIdx = idx;
-        return;
-    }
-    
-    zadnjiPresetIdx = idx;
-    postaviPoziciju(kuteviInt);
-    trenutnoStanje = STANJE_MIRUJE;
+    postaviSve(cilj, idx);
 }
 
 int Manipulator::dohvatiPresetIdx() {
@@ -109,9 +122,7 @@ int Manipulator::dohvatiPresetIdx() {
 String Manipulator::dohvatiNazivPozicije() {
     if (zadnjiPresetIdx == -1) return "Manual";
     if (trenutnoStanje == STANJE_PARKIRANJE) return "Parking";
-    if (trenutnoStanje == STANJE_IDUCI_U_SAFE_PRIJE_PARKING || 
-        trenutnoStanje == STANJE_IDUCI_U_SAFE_IZ_PARKING ||
-        trenutnoStanje == STANJE_TEST_START_SAFE) return "Safe";
+    if (trenutnoStanje == STANJE_TEST_START_SAFE) return "Safe";
         
     if (trenutnoStanje >= STANJE_TEST_START_CEKANJE) return "Testna Sekvenca";
 
@@ -168,10 +179,11 @@ void Manipulator::azuriraj() {
     for (int i = 0; i < 5; i++) {
         float razlika = ciljaniKutovi[i] - trenutniKutovi[i];
         
-        if (abs(razlika) > abs(brzine[i]) && abs(razlika) > 0.1) {
+        if (abs(razlika) > abs(brzine[i]) && abs(brzine[i]) > 0.0001) {
             trenutniKutovi[i] += brzine[i];
             kretanjeAct = true;
         } else {
+            // Ako je preostala razlika manja od jednog koraka, "zaključaj" na cilj
             trenutniKutovi[i] = ciljaniKutovi[i];
         }
         
@@ -186,22 +198,6 @@ void Manipulator::azuriraj() {
         case STANJE_MIRUJE:
         case STANJE_PARKIRANJE:
             if (!kretanjeAct) trenutnoStanje = STANJE_MIRUJE;
-            break;
-
-        case STANJE_IDUCI_U_SAFE_PRIJE_PARKING:
-            if (!kretanjeAct) {
-                // Stigli smo u SAFE, sada mozemo u PARKING
-                postaviPoziciju(pozicijaParking);
-                trenutnoStanje = STANJE_PARKIRANJE;
-            }
-            break;
-
-        case STANJE_IDUCI_U_SAFE_IZ_PARKING:
-            if (!kretanjeAct) {
-                // Stigli smo u SAFE, idemo dalje do zeljenog preseta ili kuta
-                postaviPoziciju(odgodeniCiljevi);
-                trenutnoStanje = STANJE_MIRUJE;
-            }
             break;
 
         case STANJE_SEK_PRIPREMA:
@@ -232,7 +228,7 @@ void Manipulator::azuriraj() {
         // 2. Čitanje QR koda: SAFE -> QR
         case STANJE_TEST_QR_KOD:
             if (!kretanjeAct) {
-                postaviPoziciju(pozicijaQrKod);
+                postaviPoziciju(pozicijaCitanjeQR);
                 trenutnoStanje = STANJE_MIRUJE; // Zavrsna destinacija
             }
             break;

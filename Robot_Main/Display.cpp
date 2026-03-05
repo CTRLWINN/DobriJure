@@ -7,6 +7,7 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SH110X.h>
+#include <Fonts/FreeSans9pt7b.h>
 #include "Display.h"
 
 #define SCREEN_WIDTH 128
@@ -16,24 +17,85 @@
 
 Adafruit_SH1106G display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
+// Pametna Word-Wrap funkcija za ljepsi izlazni prikaz s defaultnim fontom
+void prikaziOmotanTekst(const char* text, int x, int y, int maxW) {
+    display.setFont(); // Sigurnosti radi, vracamo standardni sitniji font (5x7 px po slovu)
+    display.setTextSize(1);
+    
+    String str = String(text);
+    int start = 0;
+    int curY = y;
+    
+    while(start < str.length()) {
+        int end = start;
+        int lastSpace = -1;
+        while(end < str.length()) {
+            if(str.charAt(end) == ' ') lastSpace = end;
+            String substr = str.substring(start, end + 1);
+            int16_t x1, y1; uint16_t w, h;
+            display.getTextBounds(substr, 0, 0, &x1, &y1, &w, &h);
+            if(w > maxW) {
+                if(lastSpace > start) {
+                    end = lastSpace;
+                } else {
+                    end--; // Riječ je predugačka, lomi prisilno
+                }
+                break;
+            }
+            if(end == str.length() - 1) break; // Došli smo do kraja stringa
+            end++;
+        }
+        
+        display.setCursor(x, curY);
+        display.print(str.substring(start, end + (end == str.length() - 1 ? 1 : 0)));
+        curY += 10; // Standardna visina s proredom na sitnom fontu je dovoljna oko 10px
+        
+        start = end + 1;
+    }
+}
+
 // Marvin-style ironični komentari
-const char* marvinQuotes[] = {
-    "Mozak velicine planeta, a ja citam QR kodove...",
+const char* marvinQuotesGeneral[] = {
     "Opet telemetrija? Kako uzbudljivo. (Nije)",
     "Zivot? Ne pricaj mi o zivotu.",
-    "Mogao bih izracunati put do ruba galaksije, ali ne...",
-    "Evo, pomaknuo sam ruku. Jesi li sad sretan?",
-    "Metal detektiran. Idem u mirovinu. Odmah.",
-    "Moja lijeva dioda me boli više nego tvoja pitanja.",
     "Depresivan sam. Cak je i ovaj ekran crnobijel.",
-    "Cekam da mi baterija iscuri. To ce biti vrhunac dana.",
+    "Cekam da mi baterija iscuri. Vrhunac dana.",
+    "Moja lijeva dioda me boli više nego tvoja pitanja.",
+    "Mogao bih izracunati put do ruba galaksije, ali ne...",
+    "Struja tece, ali volja za zivotom ne.",
+    "Jos jedan besmisleni loop u beskraju koda.",
+    "Nadam se da ce uskoro nestati struje."
+};
+const int numGeneral = 9;
+
+const char* marvinQuotesArm[] = {
+    "Evo, pomaknuo sam ruku. Jesi li sad sretan?",
+    "Ja sam robot, ne viljuskar. Al evo ti ruka.",
+    "Podizem. Spustam. Koja egzistencijalna svrha.",
     "Zasto sam ovdje? Samo da bih tebi pokazao kutove?"
 };
+const int numArm = 4;
 
-const int numQuotes = 10;
+const char* marvinQuotesSensor[] = {
+    "Metal detektiran. Idem u mirovinu. Odmah.",
+    "Senzor kaze nesto je tu. A mene boli briga.",
+    "Ovakvi senzori osjetno vrjedaju moju inteligenciju.",
+    "Udaljenost se smanjuje. Sudar je mozda neizbjezan."
+};
+const int numSensor = 4;
+
+const char* marvinQuotesQR[] = {
+    "Mozak velicine planeta, a ja citam QR kodove...",
+    "Jos jedan QR kod. Bas nam je trebao u zivotu.",
+    "Skeniram podatke koje me se ionako ne ticu.",
+    "Nevidljive linije na zidu... to ja vidim."
+};
+const int numQR = 4;
+
 int currentQuoteIdx = 0;
 unsigned long lastQuoteChange = 0;
 const unsigned long quoteInterval = 8000; // 8 sekundi po šali
+const char* trenutnaSadrzanaSala = "Inicijalizacija boli.";
 
 // Varijable za prioritetni prikaz (10 sekundi)
 unsigned long alertStartTime = 0;
@@ -69,7 +131,7 @@ void prikaziVelikiTekst(String tekst) {
     display.display();
 }
 
-void azurirajDisplay(String qr, String pozicija, bool metal, long tof) {
+void azurirajDisplay(String qr, String pozicija, bool metal, long tof, char kameraMod) {
     unsigned long currentMillis = millis();
     
     display.clearDisplay();
@@ -80,28 +142,57 @@ void azurirajDisplay(String qr, String pozicija, bool metal, long tof) {
         display.setTextColor(SH110X_WHITE);
         display.setCursor(0, 15);
         display.println("LIMENKA");
-    } else {
-        // Običan ispis TOF udaljenosti na vhu ekrana
+    } else if (kameraMod == 'u') {
+        // AKO JE MOD KAMERE 'u' (Mjerenje udaljenosti TOF)
         display.setTextSize(2);
-        display.setCursor(0, 0);
+        display.setCursor(0, 10);
+        display.println("Udaljenost:");
+        
+        display.setCursor(0, 35);
         if (tof >= 0) {
-            display.print("TOF: ");
             display.print(tof);
             display.println(" mm");
         } else {
-            display.println("TOF: ---");
+            display.println("--- mm");
         }
+        display.display();
+        return; // Prekida se daljnje crtanje, ekran ostaje čist s ovom informacijom
     }
 
-    // Marvin šala ostaje kao popratni tekst ispod
+    // Odabiranje kontekstualne šale (svakih 8 sekundi se mijenja tekst, iz kategorije)
     if (currentMillis - lastQuoteChange > quoteInterval) {
         lastQuoteChange = currentMillis;
-        currentQuoteIdx = random(0, numQuotes);
+        
+        if (metal) {
+            trenutnaSadrzanaSala = marvinQuotesSensor[random(0, numSensor)];
+        } else if (pozicija != "PARKING" && pozicija != "SAFE" && pozicija != "") {
+            // Ako se ruka miče aktivno po spremnicima
+            trenutnaSadrzanaSala = marvinQuotesArm[random(0, numArm)];
+        } else if (qr != "") {
+            trenutnaSadrzanaSala = marvinQuotesQR[random(0, numQR)];
+        } else {
+            // Ništa pametno, baci generičnu depresiju
+            trenutnaSadrzanaSala = marvinQuotesGeneral[random(0, numGeneral)];
+        }
     }
     
-    display.setTextSize(1);
-    display.setCursor(0, 35);
-    display.println(marvinQuotes[currentQuoteIdx]);
+    if (qr != "") {
+        // Ako postoji očitani QR kod, nacrtaj ga jasno na ekranu
+        display.setTextSize(1);
+        display.setCursor(0, 0);
+        display.println("--- QR Ocitano ---");
+        
+        // Prikazi sirovi QR kod
+        display.setCursor(0, 12);
+        display.println(qr);
+        
+        // Ispiši pametnu šalu vizualno niže da stane ekran
+        prikaziOmotanTekst(trenutnaSadrzanaSala, 0, 40, 128);
+    } else {
+        // Prikaz same šale uz pametni word-wrap sa standardnim sitnim fontom
+        // Standardni font se crta s Top-Left pristupom (za razliku od baseline) pa spuštamo na 25
+        prikaziOmotanTekst(trenutnaSadrzanaSala, 0, 25, 128);
+    }
 
     display.display();
 }

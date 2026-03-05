@@ -55,18 +55,19 @@ void setup() {
     }
 
     
-    // 2. Odlazak u SAFE poziciju i prikaz na ekranu (ceka 3 sekunde)
+    // 2. Odlazak u SAFE poziciju i prikaz na ekranu (ceka 1.8 sekundi ukupno)
     prikaziVelikiTekst("SAFE");
     ruka.postaviPoziciju(pozicijaSafe);
     t = millis();
-    while (millis() - t < 3000) {
+    while (millis() - t < 1800) {
         ruka.azuriraj();
         delay(20);
     }
+    ruka.ucitajPreset(1); // Force robot to recognize it is in SAFE (1) at start
     // Nakon ovog normalni loop nastupa s ispisom šala.
 
-    // Smanji timeout za Serial2 da readString ne blokira dugo u petljama
-    Serial2.setTimeout(5);
+    // Povećaj timeout za Serial2 da readString ne puca kod dužih JSON komada
+    Serial2.setTimeout(50);
     
     Serial.println("Robot Ready. Waiting for commands...");
 }
@@ -84,7 +85,8 @@ void loop() {
             dohvatiZadnjiQR(),
             ruka.dohvatiNazivPozicije(),
             ocitajInduktivni(),
-            dohvatiVisionUdaljenost()
+            dohvatiVisionUdaljenost(),
+            dohvatiKameraMod()
         );
     }
 
@@ -97,6 +99,21 @@ void loop() {
             Serial.println(msg);
 
             // --- MANUALNE KOMANDE (Tekstualni format) ---
+            if (msg.startsWith("NICLA:")) {
+                // Preusmjeravanje komande sa dashboarda na Niclin Serial3
+                // msg je npr. "NICLA:u" ili "NICLA:0"
+                if (msg.length() > 6) {
+                    char commandForNicla = msg.charAt(6);
+                    Serial3.print(commandForNicla);
+                    postaviKameraMod(commandForNicla); // Snimamo mod da bi displej znao nacrtat format udaljenosti!
+                    
+                    Serial2.println("{\"status\": \"OK\"}");
+                    Serial.print("Proslijedeno Nicli: ");
+                    Serial.println(commandForNicla);
+                }
+                return;
+            }
+            
             if (msg.startsWith("SERVO:")) {
                 int commaIdx = msg.indexOf(',');
                 if (commaIdx != -1) {
@@ -178,6 +195,29 @@ void loop() {
                          }
                      }
                 }
+                else if (strcmp(cmd, "arm_pos") == 0) {
+                     JsonArray arr = doc["angles"];
+                     int kuteviInt[5];
+                     for(int i=0; i<5; i++) {
+                         // as<int>() je sigurniji način od varijantnog OR operatora u ovoj petlji
+                         kuteviInt[i] = arr[i].as<int>();
+                     }
+                     int p_idx = doc["preset_idx"] | -1;
+                     ruka.postaviSve(kuteviInt, p_idx);
+                     Serial2.println("{\"status\": \"OK\"}");
+                }
+                else if (strcmp(cmd, "nicla") == 0) {
+                     // Auto-Misija salje "nicla" json. Prosljedujemo prvi (jedini) znak parametra mod prema Serial3
+                     const char* modStr = doc["mod"];
+                     if (modStr && strlen(modStr) > 0) {
+                         char nicla_cmd = modStr[0];
+                         Serial3.print(nicla_cmd);
+                         postaviKameraMod(nicla_cmd);
+                         Serial2.println("{\"status\": \"OK\"}");
+                         Serial.print("Auto-Misija prebacuje kameru u mod: ");
+                         Serial.println(nicla_cmd);
+                     }
+                }
                 else if (strcmp(cmd, "read_sensor") == 0) {
                     const char* type = doc["type"];
                     if (strcmp(type, "induktivni") == 0) {
@@ -220,8 +260,43 @@ void loop() {
                     Serial.println("Unknown command.");
                 }
             } else {
-                Serial.print("JSON Error: ");
-                Serial.println(error.c_str());
+                // FALLBACK: Ako nije JSON, možda je stara raw komanda (npr. ARM:1 ili NICLA:q)
+                String raw = msg;
+                if (raw.startsWith("ARM:")) {
+                    int idx = raw.substring(4).toInt();
+                    ruka.ucitajPreset(idx);
+                }
+                else if (raw.startsWith("NICLA:")) {
+                    char m = raw.charAt(6);
+                    Serial3.print(m);
+                    postaviKameraMod(m);
+                }
+                else if (raw.startsWith("SAVE_PRESET:")) {
+                    // Ignoriramo po želji korisnika (ne sprema u EEPROM)
+                }
+                else if (raw.startsWith("LOAD_PRESET:")) {
+                    int idx = raw.substring(12).toInt();
+                    ruka.ucitajPreset(idx);
+                }
+                else if (raw.startsWith("MAN:")) {
+                    // Manual kretanje: MAN:FWD,200
+                    String sub = raw.substring(4);
+                    int comma = sub.indexOf(',');
+                    if (comma != -1) {
+                        String dir = sub.substring(0, comma);
+                        int spd = sub.substring(comma+1).toInt();
+                        if (dir == "FWD") vozi(spd, spd);
+                        else if (dir == "BCK") vozi(-spd, -spd);
+                        else if (dir == "LFT") vozi(-spd, spd);
+                        else if (dir == "RGT") vozi(spd, -spd);
+                    }
+                }
+                else if (raw == "STOP") {
+                    stani();
+                }
+                
+                Serial.print("Raw komanda obrađena: ");
+                Serial.println(raw);
             }
         }
     }
@@ -230,9 +305,9 @@ void loop() {
 }
 
 void posaljiTelemetriju() {
-    // --- TELEMETRIJA (svakih 200ms) ---
+    // --- TELEMETRIJA (svakih 100ms) ---
     static unsigned long zadnjaTelemetrija = 0;
-    if (millis() - zadnjaTelemetrija > 200) {
+    if (millis() - zadnjaTelemetrija > 100) {
         zadnjaTelemetrija = millis();
         
         long encL = dohvatiLijeviEnkoder();
@@ -253,10 +328,15 @@ void posaljiTelemetriju() {
         
         float yaw = dohvatiYaw(); 
         float gyro = dohvatiKutGyro();
+        float gz = dohvatiGyroZ();
         long tof = dohvatiVisionUdaljenost();
         String ip = dohvatiVisionIP();
         
-        // Format: STATUS:cm,pL,pR,armIdx,usF,usB,usL,usR,ind,yaw,gyro,tof,ip
+        String destM = dohvatiOdredisteMetal(); if (destM == "") destM = "-";
+        String destP = dohvatiOdredistePlastika(); if (destP == "") destP = "-";
+        String destS = dohvatiOdredisteSpuzva(); if (destS == "") destS = "-";
+        
+        // Format: STATUS:cm,pL,pR,armIdx,usF,usB,usL,usR,ind,yaw,gyro,gz,tof,ip,destM,destP,destS
         Serial2.print("STATUS:");
         Serial2.print(cm, 1); Serial2.print(",");
         Serial2.print(encL); Serial2.print(",");
@@ -269,7 +349,11 @@ void posaljiTelemetriju() {
         Serial2.print(ind ? "1" : "0"); Serial2.print(",");
         Serial2.print(yaw, 1); Serial2.print(",");
         Serial2.print(gyro, 1); Serial2.print(",");
+        Serial2.print(gz, 1); Serial2.print(",");
         Serial2.print(tof); Serial2.print(",");
-        Serial2.println(ip);
+        Serial2.print(ip); Serial2.print(",");
+        Serial2.print(destM); Serial2.print(",");
+        Serial2.print(destP); Serial2.print(",");
+        Serial2.println(destS);
     }
 }

@@ -27,22 +27,32 @@
 #define CH_HVATALJKA 4
 
 // Pozicije (Glavne)
-const int pozicijaParking[5] = {135, 150, 40, 100, 90};
-const int pozicijaSafe[5]     = {135, 110, 80, 60, 90};
+const int pozicijaParking[5]        = {135, 164, 40, 100, 20};
+const int pozicijaSafe[5]           = {135, 110, 80, 60, 90};
+const int pozicijaVoznja[5]         = {135, 140, 60, 150, 25};
+const int pozicijaPripremaQR[5]     = {190, 90, 60, 50, 40};
+const int pozicijaCitanjeQR[5]      = {250, 80, 80, 55, 25};
+const int pozicijaPripremaPickup[5] = {135, 80, 90, 40, 80};
+const int pozicijaPickup[5]         = {135, 65, 130, 70, 145}; // Pretpostavljena greška u nazivu kod korisnika za drugu PRIPREMA_PICKUP
+const int pozicijaProvjeraMetal[5]  = {185, 105, 55, 70, 145};
+const int pozicijaVoznjaPickup[5]   = {130, 150, 55, 20, 145};
 
-// Placeholder pozicije za testne sekvence (Korisnik će ažurirati kasnije)
-const int pozicijaQrKod[5]        = {135, 90, 90, 90, 90};
-const int pozicijaVoznja[5]       = {135, 90, 90, 90, 90};
-const int pozicijaTrazimObjekt[5] = {135, 90, 90, 90, 90};
-const int pozicijaHvatanje[5]     = {135, 90, 90, 90, 90};
-const int pozicijaSpremi[5]       = {135, 90, 90, 90, 90};
+// Pozicije za ostavljanje (D1, D2, D3)
+const int pozicijaOstavljanjePriprema[5] = {135, 90, 90, 90, 90};
+const int pozicijaOstavljanjeD1[5]       = {135, 90, 90, 90, 90};
+const int pozicijaOstavljanjeD2[5]       = {135, 90, 90, 90, 90};
+const int pozicijaOstavljanjeD3[5]       = {135, 90, 90, 90, 90};
+const int pozicijaProvjeraOstavljanje[5] = {135, 90, 90, 90, 90};
+
+// Placeholder pozicije za ostale (Korisnik će ažurirati kasnije)
+const int pozicijaTrazimObjekt[5]   = {135, 90, 90, 90, 90};
+const int pozicijaHvatanje[5]       = {135, 90, 90, 90, 90};
+const int pozicijaSpremi[5]         = {135, 90, 90, 90, 90};
 
 // Stanja za State Machine (Hrvatski)
 enum StanjeRuke {
     STANJE_MIRUJE,
     STANJE_PARKIRANJE,
-    STANJE_IDUCI_U_SAFE_PRIJE_PARKING,
-    STANJE_IDUCI_U_SAFE_IZ_PARKING,
     // Sekvencijalna stanja za orkestraciju
     STANJE_SEK_PRIPREMA,  // Odlazak na poziciju iznad
     STANJE_SEK_SPUSTANJE, 
@@ -84,7 +94,8 @@ public:
      * Postavlja ruku u zadanu poziciju (niz od 5 kutova).
      * Izračunava brzine za sinkronizirano kretanje (kao premjestiRobot).
      */
-    void postaviPoziciju(const int poz[5]);
+    void postaviPoziciju(const int* poz);
+    void postaviSve(const int* poz, int presetIdx = -1);
 
     void postaviKut(int kanal, float stupnjevi);
     float dohvatiKut(int kanal);

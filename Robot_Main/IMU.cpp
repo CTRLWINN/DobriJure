@@ -22,6 +22,7 @@ float magHeadingOffset = 0;
 
 // Gyro integracija
 float gyroAngleZ = 0;
+float zadnjiGZ = 0;
 unsigned long lastUpdateMicros = 0;
 
 void inicijalizirajIMU() {
@@ -94,6 +95,7 @@ void azurirajIMU() {
         
         // Oduzmi bias
         gz -= gyroBiasZ;
+        zadnjiGZ = gz;
         
         // Deadzone filter (šum)
         if (abs(gz) < 1.0) gz = 0; 
@@ -160,4 +162,8 @@ void resetirajMag() {
 
 float dohvatiAccelZ() {
     return imu.calcAccel(imu.az);
+}
+
+float dohvatiGyroZ() {
+    return zadnjiGZ;
 }
