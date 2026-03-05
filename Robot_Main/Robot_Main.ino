@@ -194,9 +194,13 @@ void loop() {
                      if (strcmp(val, "PARKING") == 0 || strcmp(val, "Parkiraj") == 0 || strcmp(val, "HOME") == 0) {
                          ruka.parkiraj();
                          Serial2.println("{\"status\": \"OK\"}");
+                     } else if (strcmp(val, "PROVJERA_PICKUP") == 0) {
+                         // Specijalni preset 6 s TOF skeniranjem
+                         ruka.ucitajPreset6Skeniranje(dohvatiVisionUdaljenost);
+                         Serial2.println("{\"status\": \"OK\"}");
                      } else {
                          int pronadjenIdx = -1;
-                         for (int i = 0; i < 15; i++) {
+                         for (int i = 0; i < 16; i++) {
                              if (strcmp(val, presetNames[i]) == 0) {
                                  pronadjenIdx = i;
                                  break;

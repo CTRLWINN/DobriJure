@@ -206,10 +206,17 @@ String Manipulator::dohvatiNazivPozicije() {
     if (zadnjiPresetIdx == -1) return "Manual";
     if (trenutnoStanje == STANJE_PARKIRANJE) return "Parking";
     if (trenutnoStanje == STANJE_TEST_START_SAFE) return "Safe";
+    
+    // Ako smo u stanjima skeniranja, vrati poseban naziv da display zna pokazati TOF
+    if (trenutnoStanje == STANJE_SKEN_LEVO || 
+        trenutnoStanje == STANJE_SKEN_DESNO || 
+        trenutnoStanje == STANJE_SKEN_NAMJESTI) {
+        return "SKENIRANJE...";
+    }
         
     if (trenutnoStanje >= STANJE_TEST_START_CEKANJE) return "Testna Sekvenca";
 
-    if (zadnjiPresetIdx >= 0 && zadnjiPresetIdx < 15) {
+    if (zadnjiPresetIdx >= 0 && zadnjiPresetIdx < 16) {
         return String(presetNames[zadnjiPresetIdx]);
     }
     return "Nepoznato";

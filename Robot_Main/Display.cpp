@@ -172,8 +172,8 @@ void azurirajDisplay(String qr, String pozicija, bool metal, long tof, char kame
         display.setTextColor(SH110X_WHITE);
         display.setCursor(0, 15);
         display.println("LIMENKA");
-    } else if (kameraMod == 'u') {
-        // AKO JE MOD KAMERE 'u' (Mjerenje udaljenosti TOF)
+    } else if (kameraMod == 'u' || pozicija == "SKENIRANJE...") {
+        // AKO JE MOD KAMERE 'u' (Mjerenje udaljenosti TOF) ili skeniranje ruke
         display.setTextSize(2);
         display.setCursor(0, 10);
         display.println("Udaljenost:");
